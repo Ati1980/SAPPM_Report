@@ -31,6 +31,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isFirstRunSetup, setIsFirstRunSetup] = useState(false);
+  const [apiUnavailable, setApiUnavailable] = useState(false);
   const [shakeCount, setShakeCount] = useState(0);
 
   const updatePinBuffer = useCallback((next: string) => {
@@ -45,6 +46,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
     setErrorMessage('');
     setIsVerified(false);
     setIsSubmitting(false);
+    setApiUnavailable(false);
     submittingRef.current = false;
     setIsCheckingStatus(true);
 
@@ -58,13 +60,18 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         if (!active) return;
         if (data && typeof data.pinConfigured === 'boolean') {
           setIsFirstRunSetup(!data.pinConfigured);
+          setApiUnavailable(false);
         } else {
-          setErrorMessage('ไม่สามารถเชื่อมต่อ API เซิร์ฟเวอร์ได้ กรุณารีเฟรชหน้าเว็บแล้วลองใหม่');
+          setApiUnavailable(true);
+          setErrorMessage(
+            'ลิงก์ Shared Preview (ais-pre) เป็นหน้าเว็บ Static ไม่มี Backend API กรุณาเปิดผ่านหน้า Preview ใน AI Studio (ais-dev) หรือ Deploy ขึ้น Cloud Run'
+          );
         }
       })
       .catch(() => {
         if (active) {
-          setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณารีเฟรชหน้าเว็บแล้วลองใหม่');
+          setApiUnavailable(true);
+          setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาเปิดผ่านหน้า Preview ใน AI Studio หรือ Deploy ขึ้น Cloud Run');
         }
       })
       .finally(() => {
@@ -100,8 +107,9 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         }
 
         if (!data) {
+          setApiUnavailable(true);
           setErrorMessage(
-            `API ไม่ตอบสนอง (${res.status}) — กรุณารีเฟรชหน้าเว็บหรือเปิดผ่านลิงก์ Dev App`
+            `ไม่พบ Backend API (${res.status}) — ลิงก์ Shared Preview (ais-pre) ไม่มีเซิร์ฟเวอร์ กรุณาเปิดผ่านหน้า Preview ใน AI Studio (ais-dev) หรือ Deploy ขึ้น Cloud Run`
           );
         } else {
           if (setupMode && res.status === 409) {
@@ -316,9 +324,9 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
                 <TactileButton
                   key={d}
                   variant="keypad"
-                  disabled={isSubmitting || isCheckingStatus}
+                  disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                   onClick={() => handleDigit(d)}
-                  className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
+                  className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm disabled:opacity-45 disabled:cursor-not-allowed"
                 >
                   {d}
                 </TactileButton>
@@ -326,28 +334,28 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="ghost"
-                disabled={isSubmitting || isCheckingStatus}
+                disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                 onClick={handleClear}
-                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold"
+                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 ล้าง
               </TactileButton>
 
               <TactileButton
                 variant="keypad"
-                disabled={isSubmitting || isCheckingStatus}
+                disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                 onClick={() => handleDigit('0')}
-                className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
+                className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 0
               </TactileButton>
 
               <TactileButton
                 variant="ghost"
-                disabled={isSubmitting || isCheckingStatus}
+                disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                 onClick={handleBackspace}
                 aria-label="ลบตัวเลข"
-                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 <Delete className="h-5 w-5" />
               </TactileButton>

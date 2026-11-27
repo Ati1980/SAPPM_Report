@@ -303,6 +303,9 @@ Write-Host "Sync สำเร็จ: $($Response.count) รายการ ($($R
                   <div className="font-mono text-xs text-slate-800 dark:text-slate-100 truncate mt-0.5">
                     {webhookUrl}
                   </div>
+                  <div className="text-[11px] text-sky-700/80 dark:text-sky-300/80 mt-0.5">
+                    หมายเหตุ: สำหรับ PowerShell / Power Automate Cloud จากภายนอก แนะนำให้กด Deploy แอปขึ้น Cloud Run ก่อนเพื่อใช้ URL จริงที่ไม่ติดหน้าล็อกอิน AI Studio
+                  </div>
                 </div>
                 <TactileButton
                   variant="surface"

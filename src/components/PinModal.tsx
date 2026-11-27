@@ -1,21 +1,63 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Delete, KeyRound, Lock, X } from 'lucide-react';
+import { safeStorageGet, safeStorageRemove, safeStorageSet } from '../utils/sapEngine';
 import { TactileButton } from './TactileButton';
+
+const PIN_HASH_KEY = 'sap_pm_2570_admin_pin_record_v1';
+
+interface StoredPinRecord {
+  salt: string;
+  hash: string;
+}
 
 interface PinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (token: string, isFirstSetup: boolean) => void;
+  onSuccess: () => void;
 }
 
-async function parseJsonSafe<T>(res: Response): Promise<T | null> {
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.toLowerCase().includes('application/json')) {
-    return null;
+function generateSaltHex(): string {
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
   }
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function sha256Salted(pin: string, salt: string): Promise<string> {
+  const input = `${salt}:${pin}`;
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    const encoded = new TextEncoder().encode(input);
+    const digest = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+  // Deterministic fallback if Web Crypto subtle is unavailable in non-HTTPS test context
+  let h1 = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h1 ^= input.charCodeAt(i);
+    h1 = Math.imul(h1, 0x01000193);
+  }
+  return (h1 >>> 0).toString(16).padStart(8, '0');
+}
+
+function loadStoredPinRecord(): StoredPinRecord | null {
+  const raw = safeStorageGet(PIN_HASH_KEY);
+  if (!raw) return null;
   try {
-    return (await res.json()) as T;
+    const parsed = JSON.parse(raw) as Partial<StoredPinRecord>;
+    if (typeof parsed.salt === 'string' && typeof parsed.hash === 'string' && parsed.salt && parsed.hash) {
+      return { salt: parsed.salt, hash: parsed.hash };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -28,10 +70,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
   const [pendingSetupPin, setPendingSetupPin] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isVerified, setIsVerified] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isFirstRunSetup, setIsFirstRunSetup] = useState(false);
-  const [apiUnavailable, setApiUnavailable] = useState(false);
   const [shakeCount, setShakeCount] = useState(0);
 
   const updatePinBuffer = useCallback((next: string) => {
@@ -45,100 +84,14 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
     setPendingSetupPin(null);
     setErrorMessage('');
     setIsVerified(false);
-    setIsSubmitting(false);
-    setApiUnavailable(false);
     submittingRef.current = false;
-    setIsCheckingStatus(true);
-
-    let active = true;
-    fetch('/api/admin/status', { cache: 'no-store' })
-      .then(async (res) => {
-        if (!res.ok) return null;
-        return parseJsonSafe<{ pinConfigured?: boolean }>(res);
-      })
-      .then((data) => {
-        if (!active) return;
-        if (data && typeof data.pinConfigured === 'boolean') {
-          setIsFirstRunSetup(!data.pinConfigured);
-          setApiUnavailable(false);
-        } else {
-          setApiUnavailable(true);
-          setErrorMessage(
-            'ลิงก์ Shared Preview (ais-pre) เป็นหน้าเว็บ Static ไม่มี Backend API กรุณาเปิดผ่านหน้า Preview ใน AI Studio (ais-dev) หรือ Deploy ขึ้น Cloud Run'
-          );
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setApiUnavailable(true);
-          setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาเปิดผ่านหน้า Preview ใน AI Studio หรือ Deploy ขึ้น Cloud Run');
-        }
-      })
-      .finally(() => {
-        if (active) setIsCheckingStatus(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    setIsFirstRunSetup(!loadStoredPinRecord());
   }, [isOpen, updatePinBuffer]);
 
-  const submitPinToServer = useCallback(
-    async (pin: string, setupMode: boolean) => {
-      if (submittingRef.current) return;
-      submittingRef.current = true;
-      setIsSubmitting(true);
-      try {
-        const endpoint = setupMode ? '/api/admin/setup' : '/api/admin/login';
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin }),
-        });
-        const data = await parseJsonSafe<{ token?: string; error?: string }>(res);
-
-        if (res.ok && data?.token) {
-          setIsVerified(true);
-          const token = data.token;
-          setTimeout(() => {
-            onSuccess(token, setupMode);
-          }, 180);
-          return;
-        }
-
-        if (!data) {
-          setApiUnavailable(true);
-          setErrorMessage(
-            `ไม่พบ Backend API (${res.status}) — ลิงก์ Shared Preview (ais-pre) ไม่มีเซิร์ฟเวอร์ กรุณาเปิดผ่านหน้า Preview ใน AI Studio (ais-dev) หรือ Deploy ขึ้น Cloud Run`
-          );
-        } else {
-          if (setupMode && res.status === 409) {
-            setIsFirstRunSetup(false);
-            setPendingSetupPin(null);
-          }
-          setErrorMessage(data.error || 'รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่');
-        }
-        setShakeCount((c) => c + 1);
-        setTimeout(() => {
-          updatePinBuffer('');
-        }, 350);
-      } catch {
-        setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบ PIN ได้ กรุณาลองใหม่');
-        setShakeCount((c) => c + 1);
-        setTimeout(() => {
-          updatePinBuffer('');
-        }, 350);
-      } finally {
-        submittingRef.current = false;
-        setIsSubmitting(false);
-      }
-    },
-    [onSuccess, updatePinBuffer]
-  );
-
   const handleCompleteFourDigits = useCallback(
-    (completedPin: string) => {
+    async (completedPin: string) => {
       if (submittingRef.current) return;
+
       if (isFirstRunSetup) {
         if (pendingSetupPin === null) {
           setPendingSetupPin(completedPin);
@@ -155,24 +108,50 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
           }, 350);
           return;
         }
-        void submitPinToServer(completedPin, true);
+
+        submittingRef.current = true;
+        const salt = generateSaltHex();
+        const hash = await sha256Salted(completedPin, salt);
+        safeStorageSet(PIN_HASH_KEY, JSON.stringify({ salt, hash }));
+        setIsVerified(true);
+        setTimeout(() => {
+          submittingRef.current = false;
+          onSuccess();
+        }, 180);
         return;
       }
 
-      void submitPinToServer(completedPin, false);
+      const stored = loadStoredPinRecord();
+      if (!stored) {
+        setIsFirstRunSetup(true);
+        setPendingSetupPin(null);
+        updatePinBuffer('');
+        return;
+      }
+
+      submittingRef.current = true;
+      const computed = await sha256Salted(completedPin, stored.salt);
+      if (computed === stored.hash) {
+        setIsVerified(true);
+        setTimeout(() => {
+          submittingRef.current = false;
+          onSuccess();
+        }, 180);
+      } else {
+        submittingRef.current = false;
+        setErrorMessage('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่');
+        setShakeCount((c) => c + 1);
+        setTimeout(() => {
+          updatePinBuffer('');
+        }, 350);
+      }
     },
-    [isFirstRunSetup, pendingSetupPin, submitPinToServer, updatePinBuffer]
+    [isFirstRunSetup, pendingSetupPin, onSuccess, updatePinBuffer]
   );
 
   const handleDigit = useCallback(
     (digit: string) => {
-      if (
-        !isOpen ||
-        isVerified ||
-        submittingRef.current ||
-        isCheckingStatus ||
-        pinRef.current.length >= 4
-      ) {
+      if (!isOpen || isVerified || submittingRef.current || pinRef.current.length >= 4) {
         return;
       }
       setErrorMessage('');
@@ -180,11 +159,11 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
       updatePinBuffer(next);
       if (next.length === 4) {
         setTimeout(() => {
-          handleCompleteFourDigits(next);
+          void handleCompleteFourDigits(next);
         }, 120);
       }
     },
-    [isOpen, isVerified, isCheckingStatus, updatePinBuffer, handleCompleteFourDigits]
+    [isOpen, isVerified, updatePinBuffer, handleCompleteFourDigits]
   );
 
   const handleBackspace = useCallback(() => {
@@ -201,6 +180,14 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
     }
   }, [isOpen, isVerified, isFirstRunSetup, updatePinBuffer]);
 
+  const handleResetPin = useCallback(() => {
+    safeStorageRemove(PIN_HASH_KEY);
+    setIsFirstRunSetup(true);
+    setPendingSetupPin(null);
+    updatePinBuffer('');
+    setErrorMessage('');
+  }, [updatePinBuffer]);
+
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -212,7 +199,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         handleBackspace();
       } else if (e.key === 'Enter' && pinRef.current.length === 4) {
         e.preventDefault();
-        handleCompleteFourDigits(pinRef.current);
+        void handleCompleteFourDigits(pinRef.current);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -232,9 +219,9 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
   const headingSubtitle = isFirstRunSetup
     ? pendingSetupPin
-      ? 'กรอกรหัส PIN 4 หลักเดิมซ้ำอีกครั้งเพื่อยืนยันการตั้งค่า'
-      : 'กำหนดรหัส PIN 4 หลักที่ต้องการใช้งานบนเซิร์ฟเวอร์ (เช่น รหัสเดิมของท่าน)'
-    : 'กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์และตั้งค่า Auto-Sync';
+      ? 'กรอกรหัส PIN 4 หลักเดิมซ้ำอีกครั้งเพื่อยืนยัน'
+      : 'กำหนดรหัส PIN 4 หลักสำหรับปลดล็อกโหมดอัปโหลดไฟล์'
+    : 'กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์ Excel / CSV และตั้งค่าแผนก';
 
   return (
     <AnimatePresence>
@@ -274,10 +261,10 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
                 {isFirstRunSetup ? <KeyRound className="h-7 w-7" /> : <Lock className="h-7 w-7" />}
               </div>
               <h3 className="font-heading text-xl font-bold text-slate-900 dark:text-white">
-                {isCheckingStatus ? 'กำลังตรวจสอบสถานะ...' : headingTitle}
+                {headingTitle}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {isCheckingStatus ? 'กรุณารอสักครู่' : headingSubtitle}
+                {headingSubtitle}
               </p>
             </div>
 
@@ -324,9 +311,8 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
                 <TactileButton
                   key={d}
                   variant="keypad"
-                  disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                   onClick={() => handleDigit(d)}
-                  className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm disabled:opacity-45 disabled:cursor-not-allowed"
+                  className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
                 >
                   {d}
                 </TactileButton>
@@ -334,34 +320,43 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="ghost"
-                disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                 onClick={handleClear}
-                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold disabled:opacity-45 disabled:cursor-not-allowed"
+                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold"
               >
                 ล้าง
               </TactileButton>
 
               <TactileButton
                 variant="keypad"
-                disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                 onClick={() => handleDigit('0')}
-                className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm disabled:opacity-45 disabled:cursor-not-allowed"
+                className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
               >
                 0
               </TactileButton>
 
               <TactileButton
                 variant="ghost"
-                disabled={isSubmitting || isCheckingStatus || apiUnavailable}
                 onClick={handleBackspace}
                 aria-label="ลบตัวเลข"
-                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 disabled:opacity-45 disabled:cursor-not-allowed"
+                className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
               >
                 <Delete className="h-5 w-5" />
               </TactileButton>
             </div>
 
-            <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-4 hidden sm:block">
+            {!isFirstRunSetup && (
+              <div className="text-center mt-3">
+                <button
+                  type="button"
+                  onClick={handleResetPin}
+                  className="text-[11px] text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 underline underline-offset-2 transition cursor-pointer"
+                >
+                  ตั้งรหัส PIN ใหม่บนเครื่องนี้
+                </button>
+              </div>
+            )}
+
+            <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-3 hidden sm:block">
               รองรับการพิมพ์ตัวเลขจากแป้นพิมพ์ (0–9, Backspace, Enter, Esc)
             </p>
           </motion.div>

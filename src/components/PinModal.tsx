@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Delete, KeyRound, Lock, X } from 'lucide-react';
 import { TactileButton } from './TactileButton';
@@ -11,18 +11,28 @@ interface PinModalProps {
 
 export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [pinBuffer, setPinBuffer] = useState('');
+  const pinRef = useRef('');
+  const [pendingSetupPin, setPendingSetupPin] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isVerified, setIsVerified] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isFirstRunSetup, setIsFirstRunSetup] = useState(false);
   const [shakeCount, setShakeCount] = useState(0);
 
+  const updatePinBuffer = useCallback((next: string) => {
+    pinRef.current = next;
+    setPinBuffer(next);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
-    setPinBuffer('');
+    updatePinBuffer('');
+    setPendingSetupPin(null);
     setErrorMessage('');
     setIsVerified(false);
     setIsSubmitting(false);
+    setIsCheckingStatus(true);
 
     let active = true;
     fetch('/api/admin/status')
@@ -33,20 +43,23 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         }
       })
       .catch(() => {
-        // Ignore network error, default to login mode
+        // Default to login mode if status check fails
+      })
+      .finally(() => {
+        if (active) setIsCheckingStatus(false);
       });
 
     return () => {
       active = false;
     };
-  }, [isOpen]);
+  }, [isOpen, updatePinBuffer]);
 
-  const verifyPin = useCallback(
-    async (pin: string) => {
+  const submitPinToServer = useCallback(
+    async (pin: string, setupMode: boolean) => {
       if (isSubmitting) return;
       setIsSubmitting(true);
       try {
-        const endpoint = isFirstRunSetup ? '/api/admin/setup' : '/api/admin/login';
+        const endpoint = setupMode ? '/api/admin/setup' : '/api/admin/login';
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -57,55 +70,91 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         if (res.ok && data.token) {
           setIsVerified(true);
           const token = data.token;
-          const wasSetup = isFirstRunSetup;
           setTimeout(() => {
-            onSuccess(token, wasSetup);
+            onSuccess(token, setupMode);
           }, 180);
         } else {
+          // If setup returned 409 (PIN already set elsewhere), switch to login mode cleanly
+          if (setupMode && res.status === 409) {
+            setIsFirstRunSetup(false);
+            setPendingSetupPin(null);
+          }
           setErrorMessage(data.error || 'รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่');
           setShakeCount((c) => c + 1);
           setTimeout(() => {
-            setPinBuffer('');
-          }, 400);
+            updatePinBuffer('');
+          }, 350);
         }
       } catch {
         setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบ PIN ได้');
         setShakeCount((c) => c + 1);
         setTimeout(() => {
-          setPinBuffer('');
-        }, 400);
+          updatePinBuffer('');
+        }, 350);
       } finally {
         setIsSubmitting(false);
       }
     },
-    [isFirstRunSetup, isSubmitting, onSuccess]
+    [isSubmitting, onSuccess, updatePinBuffer]
+  );
+
+  const handleCompleteFourDigits = useCallback(
+    (completedPin: string) => {
+      if (isFirstRunSetup) {
+        if (pendingSetupPin === null) {
+          setPendingSetupPin(completedPin);
+          updatePinBuffer('');
+          setErrorMessage('');
+          return;
+        }
+        if (completedPin !== pendingSetupPin) {
+          setPendingSetupPin(null);
+          setErrorMessage('รหัส PIN ทั้งสองครั้งไม่ตรงกัน กรุณาตั้งใหม่อีกครั้ง');
+          setShakeCount((c) => c + 1);
+          setTimeout(() => {
+            updatePinBuffer('');
+          }, 350);
+          return;
+        }
+        void submitPinToServer(completedPin, true);
+        return;
+      }
+
+      void submitPinToServer(completedPin, false);
+    },
+    [isFirstRunSetup, pendingSetupPin, submitPinToServer, updatePinBuffer]
   );
 
   const handleDigit = useCallback(
     (digit: string) => {
-      if (!isOpen || isVerified || isSubmitting || pinBuffer.length >= 4) return;
+      if (!isOpen || isVerified || isSubmitting || isCheckingStatus || pinRef.current.length >= 4) {
+        return;
+      }
       setErrorMessage('');
-      const next = pinBuffer + digit;
-      setPinBuffer(next);
+      const next = pinRef.current + digit;
+      updatePinBuffer(next);
       if (next.length === 4) {
         setTimeout(() => {
-          void verifyPin(next);
+          handleCompleteFourDigits(next);
         }, 120);
       }
     },
-    [isOpen, isVerified, isSubmitting, pinBuffer, verifyPin]
+    [isOpen, isVerified, isSubmitting, isCheckingStatus, updatePinBuffer, handleCompleteFourDigits]
   );
 
   const handleBackspace = useCallback(() => {
-    if (!isOpen || isVerified || isSubmitting || pinBuffer.length === 0) return;
-    setPinBuffer((prev) => prev.slice(0, -1));
-  }, [isOpen, isVerified, isSubmitting, pinBuffer.length]);
+    if (!isOpen || isVerified || isSubmitting || pinRef.current.length === 0) return;
+    updatePinBuffer(pinRef.current.slice(0, -1));
+  }, [isOpen, isVerified, isSubmitting, updatePinBuffer]);
 
   const handleClear = useCallback(() => {
     if (!isOpen || isVerified || isSubmitting) return;
-    setPinBuffer('');
+    updatePinBuffer('');
     setErrorMessage('');
-  }, [isOpen, isVerified, isSubmitting]);
+    if (isFirstRunSetup) {
+      setPendingSetupPin(null);
+    }
+  }, [isOpen, isVerified, isSubmitting, isFirstRunSetup, updatePinBuffer]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -116,9 +165,9 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
       } else if (e.key === 'Backspace') {
         e.preventDefault();
         handleBackspace();
-      } else if (e.key === 'Enter' && pinBuffer.length === 4) {
+      } else if (e.key === 'Enter' && pinRef.current.length === 4) {
         e.preventDefault();
-        void verifyPin(pinBuffer);
+        handleCompleteFourDigits(pinRef.current);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -126,9 +175,21 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, pinBuffer, handleDigit, handleBackspace, verifyPin, onClose]);
+  }, [isOpen, handleDigit, handleBackspace, handleCompleteFourDigits, onClose]);
 
   const keypadDigits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+  const headingTitle = isFirstRunSetup
+    ? pendingSetupPin
+      ? 'ยืนยันรหัส PIN อีกครั้ง'
+      : 'ตั้งค่า PIN ผู้ดูแลครั้งแรก'
+    : 'เข้าสู่ระบบผู้ดูแล (Admin)';
+
+  const headingSubtitle = isFirstRunSetup
+    ? pendingSetupPin
+      ? 'กรอกรหัส PIN 4 หลักเดิมซ้ำอีกครั้งเพื่อยืนยันการตั้งค่า'
+      : 'กำหนดรหัส PIN 4 หลักที่ต้องการใช้งานบนเซิร์ฟเวอร์ (เช่น รหัสเดิมของท่าน)'
+    : 'กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์และตั้งค่า Auto-Sync';
 
   return (
     <AnimatePresence>
@@ -168,12 +229,10 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
                 {isFirstRunSetup ? <KeyRound className="h-7 w-7" /> : <Lock className="h-7 w-7" />}
               </div>
               <h3 className="font-heading text-xl font-bold text-slate-900 dark:text-white">
-                {isFirstRunSetup ? 'ตั้งค่า PIN ผู้ดูแลครั้งแรก' : 'เข้าสู่ระบบผู้ดูแล (Admin)'}
+                {isCheckingStatus ? 'กำลังตรวจสอบสถานะ...' : headingTitle}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {isFirstRunSetup
-                  ? 'กำหนดรหัส PIN 4 หลักบนเซิร์ฟเวอร์เพื่อใช้งาน Admin & Cloud Sync'
-                  : 'กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์และตั้งค่า Auto-Sync'}
+                {isCheckingStatus ? 'กรุณารอสักครู่' : headingSubtitle}
               </p>
             </div>
 
@@ -220,7 +279,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
                 <TactileButton
                   key={d}
                   variant="keypad"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isCheckingStatus}
                   onClick={() => handleDigit(d)}
                   className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
                 >
@@ -230,7 +289,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="ghost"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingStatus}
                 onClick={handleClear}
                 className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold"
               >
@@ -239,7 +298,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="keypad"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingStatus}
                 onClick={() => handleDigit('0')}
                 className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
               >
@@ -248,7 +307,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="ghost"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCheckingStatus}
                 onClick={handleBackspace}
                 aria-label="ลบตัวเลข"
                 className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"

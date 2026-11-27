@@ -76,6 +76,16 @@ export interface PersistedUploadPayload {
   fileName: string;
   currentSheetName: string;
   uploadedAt: string;
+  syncSource?: string;
+  updatedAtIso?: string;
   matchedColumns: Record<string, string>;
   rawRecords: MORecord[];
+}
+
+export interface AdminStatusResponse {
+  pinConfigured: boolean;
+  syncKeyConfigured: boolean;
+  syncKeyPreview: string | null;
+  hasEnvPin: boolean;
+  hasEnvSyncKey: boolean;
 }

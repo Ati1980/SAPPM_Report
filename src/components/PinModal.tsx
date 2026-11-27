@@ -1,70 +1,111 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Delete, Lock, X } from 'lucide-react';
-import { ADMIN_PIN } from '../constants/sapData';
+import { Delete, KeyRound, Lock, X } from 'lucide-react';
 import { TactileButton } from './TactileButton';
 
 interface PinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (token: string, isFirstSetup: boolean) => void;
 }
 
 export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [pinBuffer, setPinBuffer] = useState('');
-  const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [isVerified, setIsVerified] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFirstRunSetup, setIsFirstRunSetup] = useState(false);
   const [shakeCount, setShakeCount] = useState(0);
 
   useEffect(() => {
-    if (isOpen) {
-      setPinBuffer('');
-      setHasError(false);
-      setIsVerified(false);
-    }
+    if (!isOpen) return;
+    setPinBuffer('');
+    setErrorMessage('');
+    setIsVerified(false);
+    setIsSubmitting(false);
+
+    let active = true;
+    fetch('/api/admin/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { pinConfigured?: boolean } | null) => {
+        if (active && data) {
+          setIsFirstRunSetup(!data.pinConfigured);
+        }
+      })
+      .catch(() => {
+        // Ignore network error, default to login mode
+      });
+
+    return () => {
+      active = false;
+    };
   }, [isOpen]);
 
   const verifyPin = useCallback(
-    (pin: string) => {
-      if (pin === ADMIN_PIN) {
-        setIsVerified(true);
-        setTimeout(() => {
-          onSuccess();
-        }, 200);
-      } else {
-        setHasError(true);
+    async (pin: string) => {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
+      try {
+        const endpoint = isFirstRunSetup ? '/api/admin/setup' : '/api/admin/login';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+
+        if (res.ok && data.token) {
+          setIsVerified(true);
+          const token = data.token;
+          const wasSetup = isFirstRunSetup;
+          setTimeout(() => {
+            onSuccess(token, wasSetup);
+          }, 180);
+        } else {
+          setErrorMessage(data.error || 'รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่');
+          setShakeCount((c) => c + 1);
+          setTimeout(() => {
+            setPinBuffer('');
+          }, 400);
+        }
+      } catch {
+        setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบ PIN ได้');
         setShakeCount((c) => c + 1);
         setTimeout(() => {
           setPinBuffer('');
-        }, 420);
+        }, 400);
+      } finally {
+        setIsSubmitting(false);
       }
     },
-    [onSuccess]
+    [isFirstRunSetup, isSubmitting, onSuccess]
   );
 
   const handleDigit = useCallback(
     (digit: string) => {
-      if (!isOpen || isVerified || pinBuffer.length >= 4) return;
-      setHasError(false);
+      if (!isOpen || isVerified || isSubmitting || pinBuffer.length >= 4) return;
+      setErrorMessage('');
       const next = pinBuffer + digit;
       setPinBuffer(next);
       if (next.length === 4) {
-        setTimeout(() => verifyPin(next), 120);
+        setTimeout(() => {
+          void verifyPin(next);
+        }, 120);
       }
     },
-    [isOpen, isVerified, pinBuffer, verifyPin]
+    [isOpen, isVerified, isSubmitting, pinBuffer, verifyPin]
   );
 
   const handleBackspace = useCallback(() => {
-    if (!isOpen || isVerified || pinBuffer.length === 0) return;
+    if (!isOpen || isVerified || isSubmitting || pinBuffer.length === 0) return;
     setPinBuffer((prev) => prev.slice(0, -1));
-  }, [isOpen, isVerified, pinBuffer.length]);
+  }, [isOpen, isVerified, isSubmitting, pinBuffer.length]);
 
   const handleClear = useCallback(() => {
-    if (!isOpen || isVerified) return;
+    if (!isOpen || isVerified || isSubmitting) return;
     setPinBuffer('');
-    setHasError(false);
-  }, [isOpen, isVerified]);
+    setErrorMessage('');
+  }, [isOpen, isVerified, isSubmitting]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -77,7 +118,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         handleBackspace();
       } else if (e.key === 'Enter' && pinBuffer.length === 4) {
         e.preventDefault();
-        verifyPin(pinBuffer);
+        void verifyPin(pinBuffer);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -124,20 +165,22 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
             <div className="text-center mb-4">
               <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-sky-600 text-white shadow-lg shadow-indigo-600/30">
-                <Lock className="h-7 w-7" />
+                {isFirstRunSetup ? <KeyRound className="h-7 w-7" /> : <Lock className="h-7 w-7" />}
               </div>
               <h3 className="font-heading text-xl font-bold text-slate-900 dark:text-white">
-                เข้าสู่ระบบผู้ดูแล (Admin)
+                {isFirstRunSetup ? 'ตั้งค่า PIN ผู้ดูแลครั้งแรก' : 'เข้าสู่ระบบผู้ดูแล (Admin)'}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์และตั้งค่า
+                {isFirstRunSetup
+                  ? 'กำหนดรหัส PIN 4 หลักบนเซิร์ฟเวอร์เพื่อใช้งาน Admin & Cloud Sync'
+                  : 'กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์และตั้งค่า Auto-Sync'}
               </p>
             </div>
 
             {/* 4 Animated PIN Dots */}
             <motion.div
               key={shakeCount}
-              animate={hasError ? { x: [0, -10, 10, -8, 8, 0] } : { x: 0 }}
+              animate={errorMessage ? { x: [0, -10, 10, -8, 8, 0] } : { x: 0 }}
               transition={{ duration: 0.36 }}
               className="flex items-center justify-center gap-4 my-5"
             >
@@ -164,19 +207,20 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
             {/* Error Message */}
             <div
-              className={`h-5 text-center text-xs font-heading font-semibold text-rose-500 dark:text-rose-400 mb-3 transition-opacity ${
-                hasError ? 'opacity-100' : 'opacity-0'
+              className={`min-h-[20px] text-center text-xs font-heading font-semibold text-rose-500 dark:text-rose-400 mb-3 transition-opacity ${
+                errorMessage ? 'opacity-100' : 'opacity-0'
               }`}
             >
-              รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่
+              {errorMessage || ' '}
             </div>
 
-            {/* Tactile On-Screen Numeric Keypad (48px+ touch target for iOS & Android) */}
+            {/* Tactile On-Screen Numeric Keypad */}
             <div className="grid grid-cols-3 gap-2.5 max-w-[276px] mx-auto">
               {keypadDigits.map((d) => (
                 <TactileButton
                   key={d}
                   variant="keypad"
+                  disabled={isSubmitting}
                   onClick={() => handleDigit(d)}
                   className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
                 >
@@ -186,6 +230,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="ghost"
+                disabled={isSubmitting}
                 onClick={handleClear}
                 className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold"
               >
@@ -194,6 +239,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="keypad"
+                disabled={isSubmitting}
                 onClick={() => handleDigit('0')}
                 className="min-h-[52px] rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm"
               >
@@ -202,6 +248,7 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
               <TactileButton
                 variant="ghost"
+                disabled={isSubmitting}
                 onClick={handleBackspace}
                 aria-label="ลบตัวเลข"
                 className="min-h-[52px] rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"

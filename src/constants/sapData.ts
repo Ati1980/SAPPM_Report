@@ -1,7 +1,5 @@
 import type { DeptSummaryRow } from '../types/sap';
 
-export const ADMIN_PIN = '2810';
-export const ADMIN_AUTH_KEY = 'sap_pm_admin_logged_in';
 export const THEME_KEY = 'sap_pm_theme';
 export const MAPPING_KEY = 'sap_pm_dept_map_v2';
 export const IDB_NAME = 'SAP_PM_Dashboard_DB_v2';

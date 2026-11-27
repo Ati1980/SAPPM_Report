@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   ClipboardList,
+  Cloud,
   Download,
   FilePlus2,
   Layers,
@@ -23,7 +24,6 @@ import {
   Upload,
 } from 'lucide-react';
 import {
-  ADMIN_AUTH_KEY,
   DEFAULT_CODE_MAPPING,
   THEME_KEY,
 } from './constants/sapData';
@@ -31,11 +31,13 @@ import type {
   DeptSummaryRow,
   MORecord,
   ParsedSheetInfo,
+  PersistedUploadPayload,
   SortColumn,
   SortDirection,
   ToastItem,
 } from './types/sap';
 import {
+  clearUploadedDataFromDB,
   computeDashboardData,
   exportDepartmentToExcel,
   exportSummaryToExcel,
@@ -46,7 +48,6 @@ import {
   loadUploadedDataFromDB,
   parseSapExcelFile,
   safeStorageGet,
-  safeStorageRemove,
   safeStorageSet,
   saveCodeMappingToStorage,
   saveUploadedDataToDB,
@@ -56,6 +57,7 @@ import { ClosureChart } from './components/ClosureChart';
 import { PinModal } from './components/PinModal';
 import { DrillDownModal } from './components/DrillDownModal';
 import { MappingModal } from './components/MappingModal';
+import { AutomationModal } from './components/AutomationModal';
 import { MobileDeptCards } from './components/MobileDeptCards';
 import { MobileBottomNav, type MobileNavSection } from './components/MobileBottomNav';
 
@@ -66,10 +68,12 @@ export default function App() {
   // Clock
   const [clockText, setClockText] = useState<string>(() => getThaiTimestamp());
 
-  // Admin & Modals
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => safeStorageGet(ADMIN_AUTH_KEY) === 'true');
+  // Admin & Modals (Bearer token stays in memory only — never written to localStorage/sessionStorage)
+  const [adminToken, setAdminToken] = useState<string>('');
+  const isAdmin = Boolean(adminToken);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+  const [isAutomationModalOpen, setIsAutomationModalOpen] = useState(false);
   const [drillDeptName, setDrillDeptName] = useState<string | null>(null);
 
   // Dataset State
@@ -78,6 +82,7 @@ export default function App() {
   const [currentSheetName, setCurrentSheetName] = useState('');
   const [fileName, setFileName] = useState('');
   const [uploadedAt, setUploadedAt] = useState('');
+  const [cloudSyncSource, setCloudSyncSource] = useState('');
   const [rawRecords, setRawRecords] = useState<MORecord[]>([]);
   const [matchedColumns, setMatchedColumns] = useState<Record<string, string>>({});
   const [codeMapping, setCodeMapping] = useState<Record<string, string>>(() => loadSavedCodeMapping());
@@ -137,24 +142,48 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Restore saved Excel dataset from IndexedDB on mount
+  const applyPersistedDataset = useCallback((saved: PersistedUploadPayload) => {
+    setIsDemo(false);
+    setFileName(saved.fileName || 'SAP_PM_Data.xlsx');
+    setCurrentSheetName(saved.currentSheetName || '');
+    setUploadedAt(saved.uploadedAt || '');
+    setCloudSyncSource(saved.syncSource || '');
+    setMatchedColumns(saved.matchedColumns || {});
+    setRawRecords(saved.rawRecords);
+  }, []);
+
+  const fetchCloudDataset = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/sap-data');
+      if (!res.ok) return false;
+      const payload = (await res.json()) as { hasData?: boolean; data?: PersistedUploadPayload | null };
+      if (payload.hasData && payload.data && Array.isArray(payload.data.rawRecords) && payload.data.rawRecords.length > 0) {
+        applyPersistedDataset(payload.data);
+        void saveUploadedDataToDB(payload.data);
+        return true;
+      }
+    } catch {
+      // Fallback to local IndexedDB if offline
+    }
+    return false;
+  }, [applyPersistedDataset]);
+
+  // Load latest Cloud Sync dataset first, then fall back to IndexedDB on mount
   useEffect(() => {
     let mounted = true;
-    loadUploadedDataFromDB().then((saved) => {
+    (async () => {
+      const loadedFromCloud = await fetchCloudDataset();
+      if (!mounted || loadedFromCloud) return;
+      const saved = await loadUploadedDataFromDB();
       if (!mounted) return;
       if (saved && Array.isArray(saved.rawRecords) && saved.rawRecords.length > 0) {
-        setIsDemo(false);
-        setFileName(saved.fileName || 'Uploaded_Data.xlsx');
-        setCurrentSheetName(saved.currentSheetName || '');
-        setUploadedAt(saved.uploadedAt || '');
-        setMatchedColumns(saved.matchedColumns || {});
-        setRawRecords(saved.rawRecords);
+        applyPersistedDataset(saved);
       }
-    });
+    })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [applyPersistedDataset, fetchCloudDataset]);
 
   // Derived Dashboard Data
   const { summaryRows, totals, unmappedCodes, extraDeptRowsCount } = useMemo(
@@ -178,26 +207,48 @@ export default function App() {
 
   const unmappedCount = Object.keys(unmappedCodes).length;
 
-  // Load parsed sheet into state + IndexedDB
+  // Load parsed sheet into state + IndexedDB + Cloud Sync
   const applySheet = useCallback(
-    (sheet: ParsedSheetInfo, sourceFileName: string, timestamp: string) => {
+    async (sheet: ParsedSheetInfo, sourceFileName: string, timestamp: string) => {
       const records = extractSheetRecords(sheet);
+      const syncSource = 'Admin Browser Upload';
       setCurrentSheetName(sheet.name);
       setMatchedColumns(sheet.matchedNames);
       setRawRecords(records);
+      setCloudSyncSource(syncSource);
       setIsDemo(false);
 
-      saveUploadedDataToDB({
+      const payload: PersistedUploadPayload = {
         fileName: sourceFileName,
         currentSheetName: sheet.name,
         uploadedAt: timestamp,
+        syncSource,
         matchedColumns: sheet.matchedNames,
         rawRecords: records,
-      });
+      };
 
-      return records.length;
+      void saveUploadedDataToDB(payload);
+
+      let syncedToCloud = false;
+      if (adminToken) {
+        try {
+          const res = await fetch('/api/sap-sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${adminToken}`,
+            },
+            body: JSON.stringify(payload),
+          });
+          syncedToCloud = res.ok;
+        } catch {
+          syncedToCloud = false;
+        }
+      }
+
+      return { count: records.length, syncedToCloud };
     },
-    []
+    [adminToken]
   );
 
   // Handle Excel / CSV upload
@@ -226,8 +277,13 @@ export default function App() {
         setValidSheets(sheets);
         setFileName(file.name);
         setUploadedAt(nowTs);
-        const count = applySheet(sheets[0], file.name, nowTs);
-        showToast(`อัปโหลดสำเร็จ! ประมวลผลข้อมูล ${count.toLocaleString()} รายการ`, 'success');
+        const { count, syncedToCloud } = await applySheet(sheets[0], file.name, nowTs);
+        showToast(
+          syncedToCloud
+            ? `อัปโหลดและซิงค์ขึ้น Cloud สำเร็จ! (${count.toLocaleString()} รายการ)`
+            : `ประมวลผลสำเร็จ ${count.toLocaleString()} รายการ (บันทึกในเครื่องแล้ว)`,
+          'success'
+        );
       } catch (err) {
         console.error(err);
         showToast('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์', 'error');
@@ -284,26 +340,62 @@ export default function App() {
   }, [isAdmin, handleFile]);
 
   // Actions
-  const handleAdminSuccess = useCallback(() => {
-    setIsAdmin(true);
-    safeStorageSet(ADMIN_AUTH_KEY, 'true');
-    setIsPinModalOpen(false);
-    showToast('เข้าสู่ระบบ Admin สำเร็จ', 'success');
-  }, [showToast]);
+  const handleAdminSuccess = useCallback(
+    (token: string, isFirstSetup: boolean) => {
+      setAdminToken(token);
+      setIsPinModalOpen(false);
+      showToast(
+        isFirstSetup ? 'ตั้งค่า PIN และเข้าสู่ระบบ Admin สำเร็จ' : 'เข้าสู่ระบบ Admin สำเร็จ',
+        'success'
+      );
+    },
+    [showToast]
+  );
 
   const handleAdminLogout = useCallback(() => {
-    setIsAdmin(false);
-    safeStorageRemove(ADMIN_AUTH_KEY);
+    setAdminToken('');
     setIsMappingModalOpen(false);
+    setIsAutomationModalOpen(false);
     showToast('ออกจากระบบ Admin แล้ว', 'info');
   }, [showToast]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
     setRefreshRotation((r) => r + 360);
     setCodeMapping(loadSavedCodeMapping());
     setClockText(getThaiTimestamp());
-    showToast('รีเฟรชข้อมูลเรียบร้อยแล้ว', 'success');
-  }, [showToast]);
+    const fetched = await fetchCloudDataset();
+    showToast(
+      fetched ? 'ดึงข้อมูลล่าสุดจาก Cloud และคำนวณใหม่เรียบร้อยแล้ว' : 'รีเฟรชข้อมูลเรียบร้อยแล้ว',
+      'success'
+    );
+  }, [fetchCloudDataset, showToast]);
+
+  const handleClearCloudData = useCallback(async () => {
+    if (!adminToken) return;
+    try {
+      const res = await fetch('/api/sap-data/clear', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (!res.ok) {
+        showToast('ไม่สามารถล้างข้อมูล Cloud ได้', 'error');
+        return;
+      }
+      await clearUploadedDataFromDB();
+      setIsDemo(true);
+      setValidSheets([]);
+      setCurrentSheetName('');
+      setFileName('');
+      setUploadedAt('');
+      setCloudSyncSource('');
+      setRawRecords([]);
+      setMatchedColumns({});
+      setIsAutomationModalOpen(false);
+      showToast('ล้างข้อมูล Cloud Sync กลับสู่ค่าเริ่มต้นแล้ว', 'info');
+    } catch {
+      showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+    }
+  }, [adminToken, showToast]);
 
   const handleExportSummary = useCallback(() => {
     try {
@@ -489,7 +581,7 @@ export default function App() {
                       ·
                     </span>
                     <span className="font-medium text-emerald-700 dark:text-emerald-300">
-                      {`ไฟล์: ${fileName}${uploadedAt ? ` · ${uploadedAt}` : ''}`}
+                      {`ไฟล์: ${fileName}${cloudSyncSource ? ` (${cloudSyncSource})` : ''}${uploadedAt ? ` · ${uploadedAt}` : ''}`}
                     </span>
                   </>
                 )}
@@ -578,7 +670,7 @@ export default function App() {
                       Admin Mode
                     </span>
                     <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                      อัปโหลดไฟล์ Excel/CSV และตั้งค่า Code แผนก (รีเฟรชหน้าจอไม่หลุดออกจากระบบ)
+                      อัปโหลดไฟล์ Excel/CSV ตั้งค่า Code แผนก หรือเชื่อม Auto-Sync จาก SAP-PM เข้า Cloud
                     </span>
                   </div>
 
@@ -590,6 +682,15 @@ export default function App() {
                     >
                       <Upload className="h-4 w-4 shrink-0" />
                       <span>อัปโหลดไฟล์</span>
+                    </TactileButton>
+
+                    <TactileButton
+                      variant="emerald"
+                      onClick={() => setIsAutomationModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-heading text-xs sm:text-sm font-semibold shadow-md shadow-emerald-600/20 whitespace-nowrap"
+                    >
+                      <Cloud className="h-4 w-4 shrink-0" />
+                      <span>Auto-Sync Cloud</span>
                     </TactileButton>
 
                     <TactileButton
@@ -608,8 +709,8 @@ export default function App() {
 
                     <TactileButton
                       variant="surface"
-                      onClick={handleRefresh}
-                      title="รีเฟรชและคำนวณข้อมูลใหม่ตามการตั้งค่าล่าสุด"
+                      onClick={() => void handleRefresh()}
+                      title="ดึงข้อมูลล่าสุดจาก Cloud และคำนวณใหม่ตามการตั้งค่า"
                       className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 rounded-2xl bg-sky-50/90 dark:bg-sky-500/15 hover:bg-sky-100 dark:hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30 font-heading text-xs sm:text-sm font-semibold whitespace-nowrap"
                     >
                       <motion.span
@@ -690,8 +791,9 @@ export default function App() {
                             onChange={(e) => {
                               const target = validSheets.find((s) => s.name === e.target.value);
                               if (target) {
-                                applySheet(target, fileName, uploadedAt);
-                                showToast(`เปลี่ยนเป็นชีต "${target.name}" แล้ว`, 'info');
+                                void applySheet(target, fileName, uploadedAt).then(() => {
+                                  showToast(`เปลี่ยนเป็นชีต "${target.name}" แล้ว`, 'info');
+                                });
                               }
                             }}
                             className="min-h-[38px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-base sm:text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -1250,6 +1352,19 @@ export default function App() {
           saveCodeMappingToStorage(reset);
           showToast('คืนค่าเริ่มต้น 92 Code เรียบร้อยแล้ว', 'info');
         }}
+      />
+
+      <AutomationModal
+        isOpen={isAutomationModalOpen}
+        adminToken={adminToken}
+        isDemo={isDemo}
+        cloudFileName={fileName}
+        cloudSyncSource={cloudSyncSource}
+        cloudUploadedAt={uploadedAt}
+        cloudRowCount={rawRecords.length}
+        onClose={() => setIsAutomationModalOpen(false)}
+        onClearCloudData={handleClearCloudData}
+        onToast={showToast}
       />
     </div>
   );

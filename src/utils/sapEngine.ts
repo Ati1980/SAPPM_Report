@@ -1,6 +1,5 @@
 import * as XLSX from 'xlsx';
 import {
-  COLUMN_ALIASES,
   DEFAULT_CODE_MAPPING,
   DEMO_SUMMARY,
   IDB_KEY,
@@ -19,6 +18,7 @@ import type {
   SortDirection,
   UnmappedCodesMap,
 } from '../types/sap';
+import { extractSheetRecordsFromInfo, parseSapWorkbookBytes } from './sapParser';
 
 export function safeStorageGet(key: string): string | null {
   try {
@@ -126,6 +126,24 @@ export async function loadUploadedDataFromDB(): Promise<PersistedUploadPayload |
   }
 }
 
+export async function clearUploadedDataFromDB(): Promise<void> {
+  try {
+    const db = await withTimeout(openDashboardDB(), 1000);
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(IDB_KEY);
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject((e.target as IDBTransaction).error);
+      }),
+      1000
+    );
+    db.close();
+  } catch {
+    // Non-fatal
+  }
+}
+
 export function loadSavedCodeMapping(): Record<string, string> {
   const saved = safeStorageGet(MAPPING_KEY);
   if (saved) {
@@ -157,124 +175,13 @@ export function getThaiTimestamp(): string {
   return `${d} ${m} ${y} ${hh}:${mm}:${ss}`;
 }
 
-function normalizeHeader(val: unknown): string {
-  return String(val ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function detectHeaderRow(rows2D: unknown[][]): Omit<ParsedSheetInfo, 'name' | 'rows2D'> | null {
-  const limit = Math.min(rows2D.length, 10);
-  for (let r = 0; r < limit; r++) {
-    const row = rows2D[r] || [];
-    const normalizedCells = row.map(normalizeHeader);
-    const hasFL = normalizedCells.some((c) => COLUMN_ALIASES.functionalLoc.includes(c));
-    const hasSys = normalizedCells.some((c) => COLUMN_ALIASES.systemStatus.includes(c));
-    const hasPG = normalizedCells.some((c) => COLUMN_ALIASES.plannerGroup.includes(c));
-    const hasOrder = normalizedCells.some((c) => COLUMN_ALIASES.order.includes(c));
-
-    if (hasFL && hasSys && (hasPG || hasOrder)) {
-      const colIdx: Record<string, number> = {};
-      const matchedNames: Record<string, string> = {};
-      row.forEach((rawHeader, idx) => {
-        const norm = normalizeHeader(rawHeader);
-        if (!norm) return;
-        for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
-          if (colIdx[key] === undefined && aliases.includes(norm)) {
-            colIdx[key] = idx;
-            matchedNames[key] = String(rawHeader).trim();
-          }
-        }
-      });
-      return { headerRowIndex: r, colIdx, matchedNames };
-    }
-  }
-  return null;
-}
-
-function formatCellDate(val: unknown): string {
-  if (!val) return '';
-  if (val instanceof Date && !isNaN(val.getTime())) {
-    const d = String(val.getDate()).padStart(2, '0');
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const y = val.getFullYear();
-    return `${d}/${m}/${y}`;
-  }
-  return String(val).trim();
-}
-
 export async function parseSapExcelFile(file: File): Promise<ParsedSheetInfo[]> {
   const buffer = await file.arrayBuffer();
-  const data = new Uint8Array(buffer);
-  const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-  const validSheets: ParsedSheetInfo[] = [];
-
-  for (const sheetName of workbook.SheetNames) {
-    const ws = workbook.Sheets[sheetName];
-    const rows2D = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
-    const detected = detectHeaderRow(rows2D);
-    if (detected) {
-      validSheets.push({ name: sheetName, rows2D, ...detected });
-    }
-  }
-
-  return validSheets;
+  return parseSapWorkbookBytes(new Uint8Array(buffer));
 }
 
 export function extractSheetRecords(sheetInfo: ParsedSheetInfo): MORecord[] {
-  const { rows2D, headerRowIndex, colIdx } = sheetInfo;
-  const records: MORecord[] = [];
-
-  for (let i = headerRowIndex + 1; i < rows2D.length; i++) {
-    const row = rows2D[i];
-    if (!row || row.length === 0) continue;
-
-    const flRaw = colIdx.functionalLoc !== undefined ? String(row[colIdx.functionalLoc] ?? '').trim() : '';
-    const pgRaw = colIdx.plannerGroup !== undefined ? String(row[colIdx.plannerGroup] ?? '').trim() : '';
-    const sysRaw = colIdx.systemStatus !== undefined ? String(row[colIdx.systemStatus] ?? '').trim() : '';
-    const eqRaw = colIdx.equipment !== undefined ? String(row[colIdx.equipment] ?? '').trim() : '';
-    const asmRaw = colIdx.assembly !== undefined ? String(row[colIdx.assembly] ?? '').trim() : '';
-    const mpRaw = colIdx.maintenancePlan !== undefined ? String(row[colIdx.maintenancePlan] ?? '').trim() : '';
-    const orderRaw = colIdx.order !== undefined ? String(row[colIdx.order] ?? '').trim() : '';
-
-    if (!flRaw && !sysRaw && !orderRaw) continue;
-
-    // Exact SAP-PM Logic: FL = MID(FL, 5, 2) => substring(4, 6)
-    const flCode = flRaw.substring(4, 6).toUpperCase();
-    const pgCode = pgRaw.toUpperCase();
-    const combinedCode = flCode + pgCode;
-
-    // Exact Closed Status Rule
-    const sysUpper = sysRaw.toUpperCase();
-    const sys4 = sysUpper.substring(0, 4);
-    const isClosed =
-      sys4 === 'TECO' ||
-      sys4 === 'CLSD' ||
-      sysUpper.startsWith('INPR CAN') ||
-      sysUpper.startsWith('TECO CAN');
-
-    const isMaintPlan = mpRaw !== '';
-    const noEq = !flRaw || !eqRaw;
-    const noBom = !flRaw || !asmRaw;
-
-    records.push({
-      functionalLoc: flRaw,
-      plannerGroup: pgRaw,
-      code: combinedCode,
-      systemStatus: sysRaw,
-      equipment: eqRaw,
-      assembly: asmRaw,
-      maintenancePlan: mpRaw,
-      isClosed,
-      isMaintPlan,
-      noEq,
-      noBom,
-      order: orderRaw,
-      orderType: colIdx.orderType !== undefined ? String(row[colIdx.orderType] ?? '').trim() : '',
-      description: colIdx.description !== undefined ? String(row[colIdx.description] ?? '').trim() : '',
-      createdOn: colIdx.createdOn !== undefined ? formatCellDate(row[colIdx.createdOn]) : '',
-    });
-  }
-
-  return records;
+  return extractSheetRecordsFromInfo(sheetInfo);
 }
 
 export function computeDashboardData(params: {

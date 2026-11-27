@@ -1,0 +1,2695 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>รายงานการเปิด-ปิด MO ในระบบ SAP-PM 2569</title>
+
+  <!-- Google Fonts: Modern 2027 (ปี 2570) Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', '"Anuphan"', 'sans-serif'],
+            heading: ['"Anuphan"', '"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          boxShadow: {
+            glass: '0 8px 32px 0 rgba(15, 23, 42, 0.07)',
+            'glass-dark': '0 10px 36px 0 rgba(0, 0, 0, 0.45)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- SheetJS (XLSX) CDN -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* Base typography & smooth theme transitions */
+    body {
+      font-family: 'Plus Jakarta Sans', 'Anuphan', -apple-system, BlinkMacSystemFont, sans-serif;
+      transition: background-color 0.25s ease, color 0.25s ease;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    h1, h2, h3, h4, .font-heading {
+      font-family: 'Anuphan', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      letter-spacing: -0.015em;
+    }
+    .tabular-nums {
+      font-family: 'JetBrains Mono', 'Plus Jakarta Sans', monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    /* Ambient mesh gradient background */
+    .bg-mesh {
+      background-color: #f4f7fb;
+      background-image:
+        radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.14) 0px, transparent 52%),
+        radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.12) 0px, transparent 50%),
+        radial-gradient(at 80% 100%, rgba(99, 102, 241, 0.11) 0px, transparent 52%);
+    }
+    .dark .bg-mesh {
+      background-color: #070d19;
+      background-image:
+        radial-gradient(at 0% 0%, rgba(2, 132, 199, 0.22) 0px, transparent 52%),
+        radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.14) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(79, 70, 229, 0.18) 0px, transparent 52%);
+    }
+
+    /* Glassmorphism surface */
+    .glass-card {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.82);
+    }
+    .dark .glass-card {
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+
+    /* Subtle custom scrollbars */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.45); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.7); }
+
+    /* Micro-animations */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-up {
+      animation: fadeInUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes spinOnce {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin-once {
+      animation: spinOnce 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes pinShake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+    .animate-shake {
+      animation: pinShake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
+
+    /* Circular progress ring */
+    .progress-ring-circle {
+      transition: stroke-dashoffset 0.75s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+  </style>
+</head>
+<body class="bg-mesh min-h-screen text-slate-800 dark:text-slate-100 antialiased selection:bg-sky-500/20 overflow-x-hidden">
+
+  <!-- Hidden File Input -->
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+
+  <!-- Full-Window Drag & Drop Overlay (Active ONLY in Admin Mode) -->
+  <div id="dragOverlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/65 backdrop-blur-md p-6 pointer-events-none">
+    <div class="border-4 border-dashed border-sky-400 bg-slate-900/85 rounded-3xl p-10 text-center max-w-md w-full shadow-2xl">
+      <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-500/20 text-sky-400">
+        <svg class="h-9 w-9" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      </div>
+      <h3 class="font-heading text-xl font-bold text-white">วางไฟล์ Excel / CSV ที่นี่</h3>
+      <p class="text-sm text-slate-300 mt-1">ระบบจับคู่ชื่อหัวคอลัมน์ SAP-PM อัตโนมัติและแสดงกราฟทันที</p>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none"></div>
+
+  <!-- Main Wrapper -->
+  <div class="max-w-[1600px] mx-auto px-3 sm:px-5 lg:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5">
+
+    <!-- ==================== HEADER BAR ==================== -->
+    <header class="glass-card rounded-3xl shadow-glass dark:shadow-glass-dark px-4 sm:px-6 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <!-- Left: Logo, Title, Live Clock & Data Badge -->
+      <div class="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
+        <div class="relative shrink-0">
+          <div class="h-12 sm:h-14 px-3.5 sm:px-4 rounded-2xl bg-gradient-to-br from-sky-600 via-blue-700 to-indigo-800 text-white shadow-lg shadow-blue-700/25 flex flex-col justify-center">
+            <span class="font-heading text-lg sm:text-xl font-extrabold tracking-tight leading-none">SAP</span>
+            <span class="font-heading text-[9px] sm:text-[10px] font-semibold tracking-widest text-sky-200 mt-0.5">PM MODULE</span>
+          </div>
+          <span class="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-slate-900"></span>
+        </div>
+
+        <div class="min-w-0">
+          <h1 class="font-heading text-lg sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight leading-snug">
+            รายงานการเปิด-ปิด MO ในระบบ
+            <span class="bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-600 dark:from-sky-400 dark:via-blue-400 dark:to-indigo-400 bg-clip-text text-transparent font-extrabold">SAP-PM 2569</span>
+          </h1>
+          <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-1">
+            <!-- Live Thai Clock -->
+            <span class="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-blue-700 dark:text-sky-400">
+              <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"></path>
+              </svg>
+              <span id="liveClock" class="tabular-nums">--</span>
+            </span>
+
+            <span class="text-slate-300 dark:text-slate-600 hidden sm:inline">•</span>
+
+            <!-- Data Source Status Pill -->
+            <span id="dataSourceBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">
+              <span>ข้อมูลตัวอย่าง (Demo 2569)</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Viewer Mode Controls (Clean & Minimal) -->
+      <div class="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0">
+        <!-- Export Summary Button -->
+        <button
+          id="btnExportSummary"
+          type="button"
+          class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs sm:text-sm font-semibold shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+          title="ส่งออกตารางสรุปเป็นไฟล์ Excel (.xlsx)"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          <span>Export สรุป</span>
+        </button>
+
+        <!-- Light / Dark Theme Toggle -->
+        <button
+          id="btnThemeToggle"
+          type="button"
+          class="inline-flex items-center justify-center h-10 w-10 rounded-2xl bg-white/85 dark:bg-slate-800/85 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-300 border border-slate-200/80 dark:border-slate-700 transition active:scale-95 cursor-pointer"
+          title="สลับโหมดสว่าง / โหมดมืด"
+          aria-label="สลับโหมดสว่าง / โหมดมืด"
+        >
+          <svg class="h-4 w-4 hidden dark:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="5"></circle>
+            <path stroke-linecap="round" d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+          </svg>
+          <svg class="h-4 w-4 block dark:hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"></path>
+          </svg>
+        </button>
+
+        <!-- Small Admin Icon Button (Visible when Logged Out) -->
+        <button
+          id="btnAdminLogin"
+          type="button"
+          class="inline-flex items-center justify-center h-10 w-10 rounded-2xl bg-white/85 dark:bg-slate-800/85 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 border border-slate-200/80 dark:border-slate-700 transition active:scale-95 cursor-pointer"
+          title="เข้าสู่ระบบ Admin"
+          aria-label="เข้าสู่ระบบ Admin"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </button>
+
+        <!-- Active Admin Badge + Quick Logout Icon (Visible when Logged In) -->
+        <div id="headerAdminControls" class="hidden items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-2xl bg-emerald-50/95 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/35">
+          <span class="inline-flex items-center gap-1.5 font-heading text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+            <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Admin
+          </span>
+          <button
+            id="btnHeaderLogout"
+            type="button"
+            class="inline-flex items-center justify-center h-7 w-7 rounded-xl bg-rose-500/10 hover:bg-rose-600 text-rose-600 dark:text-rose-400 hover:text-white transition cursor-pointer"
+            title="ออกจากระบบ Admin"
+            aria-label="ออกจากระบบ Admin"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==================== ADMIN CONTROL PANEL (Visible ONLY when Logged In) ==================== -->
+    <section id="adminControlPanel" class="hidden animate-fade-up">
+      <div class="glass-card rounded-3xl border-2 border-indigo-200/80 dark:border-indigo-500/35 shadow-glass dark:shadow-glass-dark p-4 sm:p-5 space-y-4">
+        <!-- Admin Top Bar -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-sky-600 text-white font-heading text-xs font-semibold shadow-sm">
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              Admin Mode
+            </span>
+            <span class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              อัปโหลดไฟล์ Excel/CSV และตั้งค่า Code แผนก (กด F5 รีเฟรชไม่หลุดออกจากระบบ)
+            </span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Upload Button -->
+            <button
+              id="btnUploadAdmin"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white font-heading text-xs sm:text-sm font-semibold shadow-md shadow-sky-600/20 transition active:scale-95 cursor-pointer"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              <span>อัปโหลดไฟล์</span>
+            </button>
+
+            <!-- Department Code Mapping Settings Button -->
+            <button
+              id="btnOpenMapping"
+              type="button"
+              class="relative inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-heading text-xs sm:text-sm font-semibold transition active:scale-95 cursor-pointer"
+            >
+              <svg class="h-4 w-4 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>ตั้งค่า Code แผนก</span>
+              <span id="unmappedHeaderBadge" class="hidden -top-1.5 -right-1.5 absolute min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow">0</span>
+            </button>
+
+            <!-- Refresh Button (Recalculate & Re-apply mapping without clearing data) -->
+            <button
+              id="btnRefreshData"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-sky-50/90 dark:bg-sky-500/15 hover:bg-sky-100 dark:hover:bg-sky-500/25 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/30 font-heading text-xs sm:text-sm font-semibold transition active:scale-95 cursor-pointer"
+              title="รีเฟรชและคำนวณข้อมูลใหม่ตามการตั้งค่าล่าสุด"
+            >
+              <svg id="refreshIcon" class="h-4 w-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Refresh</span>
+            </button>
+
+            <!-- Logout Button -->
+            <button
+              id="btnAdminLogout"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-heading text-xs sm:text-sm font-semibold shadow-md shadow-rose-600/20 transition active:scale-95 cursor-pointer"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>ออกจากระบบ</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Drag & Drop Zone -->
+        <div
+          id="dropZone"
+          class="rounded-2xl border-2 border-dashed border-sky-300 dark:border-sky-500/40 hover:border-sky-500 dark:hover:border-sky-400 bg-white/70 dark:bg-slate-900/55 p-4 sm:p-5 transition cursor-pointer group"
+        >
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex flex-col sm:flex-row items-center gap-3.5 text-center sm:text-left">
+              <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400 group-hover:scale-105 transition">
+                <svg id="dropZoneIcon" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <svg id="dropZoneSpinner" class="h-6 w-6 hidden animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                </svg>
+              </div>
+              <div>
+                <h2 class="font-heading text-sm sm:text-base font-semibold text-slate-800 dark:text-white">
+                  ลากไฟล์ Excel / CSV มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์
+                </h2>
+                <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  รองรับ <span class="font-semibold text-slate-700 dark:text-slate-200">.xlsx, .xls, .csv</span> — คอลัมน์สลับตำแหน่งได้ ระบบจับคู่ตามชื่อหัวคอลัมน์ SAP-PM อัตโนมัติ
+                </p>
+              </div>
+            </div>
+            <span class="shrink-0 px-4 py-2 rounded-xl bg-sky-600/10 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 font-heading text-xs sm:text-sm font-semibold group-hover:bg-sky-600 group-hover:text-white transition">
+              เลือกไฟล์จากเครื่อง
+            </span>
+          </div>
+        </div>
+
+        <!-- Loaded File & Matched Columns Bar (Admin only) -->
+        <div id="fileStatusBar" class="hidden pt-1 border-t border-slate-200/70 dark:border-slate-700/60 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+            <span class="inline-flex items-center gap-1.5 font-heading font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-500/30">
+              <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span id="loadedFileName">-</span>
+            </span>
+            <div id="sheetSelectorWrap" class="hidden items-center gap-1.5">
+              <span class="text-slate-500 dark:text-slate-400">ชีต:</span>
+              <select id="sheetSelector" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"></select>
+            </div>
+            <span id="loadedRowCount" class="text-slate-500 dark:text-slate-400 font-medium"></span>
+          </div>
+          <div id="matchedColumnsPills" class="flex flex-wrap items-center gap-1.5 text-[11px]"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 5 EXECUTIVE KPI CARDS ==================== -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 sm:gap-4">
+
+      <!-- Card 1: Split MO (Manual) & MO (Maint.Plan) -->
+      <div class="glass-card rounded-3xl p-4 sm:p-5 shadow-glass dark:shadow-glass-dark hover:-translate-y-0.5 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-2">
+          <span class="font-heading text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">ประเภทการเปิด MO</span>
+          <div class="h-8 w-8 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 my-1">
+          <div class="rounded-2xl bg-sky-50/90 dark:bg-sky-500/10 p-2.5 border border-sky-100 dark:border-sky-500/20">
+            <div class="text-[11px] font-medium text-sky-700 dark:text-sky-300">MO (Manual)</div>
+            <div id="kpiManual" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-0.5 tabular-nums">1,919</div>
+          </div>
+          <div class="rounded-2xl bg-violet-50/90 dark:bg-violet-500/10 p-2.5 border border-violet-100 dark:border-violet-500/20">
+            <div class="text-[11px] font-medium text-violet-700 dark:text-violet-300">MO (Maint.Plan)</div>
+            <div id="kpiMaintPlan" class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-0.5 tabular-nums">337</div>
+          </div>
+        </div>
+        <div class="mt-2.5">
+          <div class="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+            <div id="kpiManualBar" class="h-full bg-gradient-to-r from-sky-500 to-blue-600 transition-all duration-700" style="width: 85.1%"></div>
+            <div id="kpiPlanBar" class="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-700" style="width: 14.9%"></div>
+          </div>
+          <div class="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium tabular-nums">
+            <span id="kpiManualPct">Manual 85.1%</span>
+            <span id="kpiPlanPct">Plan 14.9%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: Total MO 2569 -->
+      <div class="glass-card rounded-3xl p-4 sm:p-5 shadow-glass dark:shadow-glass-dark hover:-translate-y-0.5 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="font-heading text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">จำนวน MO 2569</span>
+          <div class="h-9 w-9 rounded-2xl bg-sky-100 dark:bg-sky-500/20 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+          </div>
+        </div>
+        <div class="my-3">
+          <div id="kpiTotal" class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight tabular-nums">2,256</div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">ใบสั่งซ่อมทั้งหมดในขอบเขตรายงาน</p>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-sky-100 dark:bg-sky-900/40 overflow-hidden">
+          <div class="h-full w-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full"></div>
+        </div>
+      </div>
+
+      <!-- Card 3: Closed MO -->
+      <div class="glass-card rounded-3xl p-4 sm:p-5 shadow-glass dark:shadow-glass-dark hover:-translate-y-0.5 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="font-heading text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">ปิดงาน</span>
+          <div class="h-9 w-9 rounded-2xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+        <div class="my-3">
+          <div id="kpiClosed" class="text-3xl sm:text-4xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight tabular-nums">1,607</div>
+          <p class="text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-1 font-medium">สถานะ TECO / CLSD / CAN</p>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-emerald-100 dark:bg-emerald-900/40 overflow-hidden">
+          <div id="kpiClosedBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-700" style="width: 71.23%"></div>
+        </div>
+      </div>
+
+      <!-- Card 4: Open MO -->
+      <div class="glass-card rounded-3xl p-4 sm:p-5 shadow-glass dark:shadow-glass-dark hover:-translate-y-0.5 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="font-heading text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">ยังไม่ปิด MO</span>
+          <div class="h-9 w-9 rounded-2xl bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+        <div class="my-3">
+          <div id="kpiOpen" class="text-3xl sm:text-4xl font-extrabold text-rose-600 dark:text-rose-400 tracking-tight tabular-nums">649</div>
+          <p id="kpiOpenSub" class="text-xs text-rose-600/80 dark:text-rose-300/80 mt-1 font-medium">คิดเป็น 28.77% ของทั้งหมด</p>
+        </div>
+        <div class="h-1.5 w-full rounded-full bg-rose-100 dark:bg-rose-900/40 overflow-hidden">
+          <div id="kpiOpenBar" class="h-full bg-gradient-to-r from-rose-500 to-amber-400 rounded-full transition-all duration-700" style="width: 28.77%"></div>
+        </div>
+      </div>
+
+      <!-- Card 5: % ปิด MO 69 with Circular Progress Ring -->
+      <div class="sm:col-span-2 lg:col-span-1 rounded-3xl p-4 sm:p-5 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 text-white shadow-xl shadow-emerald-600/25 hover:-translate-y-0.5 transition duration-200 flex items-center justify-between gap-3 relative overflow-hidden">
+        <div class="absolute -right-6 -bottom-6 h-28 w-28 rounded-full bg-white/10 blur-xl pointer-events-none"></div>
+        <div class="z-10">
+          <span class="font-heading text-xs font-semibold uppercase tracking-wider text-emerald-100">% ปิด MO 69</span>
+          <div id="kpiRate" class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1 tabular-nums">71.23%</div>
+          <div class="inline-flex items-center gap-1 mt-2 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-sm text-[11px] font-medium">
+            <span>เป้าหมาย 90%</span>
+          </div>
+        </div>
+        <div class="relative h-20 w-20 shrink-0 z-10">
+          <svg class="h-20 w-20" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="7"></circle>
+            <circle
+              id="kpiRingCircle"
+              class="progress-ring-circle"
+              cx="40" cy="40" r="32"
+              fill="none"
+              stroke="#ffffff"
+              stroke-width="7"
+              stroke-linecap="round"
+              stroke-dasharray="201.06"
+              stroke-dashoffset="57.84"
+            ></circle>
+          </svg>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== FILTER & SEARCH BAR ==================== -->
+    <section class="glass-card rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Toggle: 17 Primary Departments -->
+        <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+          <div class="relative">
+            <input type="checkbox" id="togglePrimary17" checked class="sr-only peer" />
+            <div class="w-11 h-6 bg-slate-300 dark:bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+          </div>
+          <span class="font-heading text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-200">แสดงเฉพาะ 17 แผนกหลัก</span>
+        </label>
+
+        <!-- Unmapped / Extra Info Banner Button -->
+        <button
+          id="btnExtraInfoBadge"
+          type="button"
+          class="hidden inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/30 hover:bg-rose-200 dark:hover:bg-rose-500/30 transition cursor-pointer"
+        >
+          <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span id="extraInfoText"></span>
+        </button>
+      </div>
+
+      <!-- Quick Department Search -->
+      <div class="relative w-full sm:w-64">
+        <svg class="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path stroke-linecap="round" d="M21 21l-4.35-4.35"></path>
+        </svg>
+        <input
+          type="text"
+          id="deptSearchInput"
+          placeholder="ค้นหาชื่อแผนก..."
+          class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/85 dark:bg-slate-800/85 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+        />
+      </div>
+    </section>
+
+    <!-- ==================== MAIN 2-COLUMN WORKSPACE ==================== -->
+    <section class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+
+      <!-- LEFT: Department Summary Table (7 cols) -->
+      <div class="xl:col-span-7 glass-card rounded-3xl shadow-glass dark:shadow-glass-dark overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200/70 dark:border-slate-700/70 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="font-heading text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <svg class="h-5 w-5 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              ตารางสรุปการเปิด-ปิด MO แยกตามแผนก
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">คลิกหัวคอลัมน์เพื่อเรียงลำดับ • คลิกที่แถวแผนกเพื่อดูรายละเอียด (Drill-Down)</p>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px] font-medium">
+            <span class="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300">≥90%</span>
+            <span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">80–89.99%</span>
+            <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">70–79.99%</span>
+            <span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300">&lt;70%</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse whitespace-nowrap">
+            <thead>
+              <tr class="bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 font-heading text-[11px] sm:text-xs border-b border-slate-200 dark:border-slate-700 select-none">
+                <th class="py-3 pl-4 pr-2 text-center w-10">#</th>
+                <th data-sort="department" class="sortable-th py-3 px-2.5 cursor-pointer hover:text-sky-600 dark:hover:text-sky-400 transition">
+                  <div class="inline-flex items-center gap-1">แผนก <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="manual" class="sortable-th py-3 px-2 text-right cursor-pointer hover:text-sky-600 dark:hover:text-sky-400 transition">
+                  <div class="inline-flex items-center justify-end gap-1">MO (Manual) <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="maintPlan" class="sortable-th py-3 px-2 text-right cursor-pointer hover:text-sky-600 dark:hover:text-sky-400 transition">
+                  <div class="inline-flex items-center justify-end gap-1">MO (Maint.Plan) <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="total" class="sortable-th py-3 px-2 text-right cursor-pointer hover:text-sky-600 dark:hover:text-sky-400 transition">
+                  <div class="inline-flex items-center justify-end gap-1">จำนวน MO2569 <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="closed" class="sortable-th py-3 px-2 text-right bg-emerald-50/70 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 cursor-pointer hover:opacity-80 transition">
+                  <div class="inline-flex items-center justify-end gap-1">ปิดงาน <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="open" class="sortable-th py-3 px-2 text-right bg-rose-50/70 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 cursor-pointer hover:opacity-80 transition">
+                  <div class="inline-flex items-center justify-end gap-1">ยังไม่ปิด MO <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="noEq" class="sortable-th py-3 px-2 text-right bg-amber-50/70 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 cursor-pointer hover:opacity-80 transition">
+                  <div class="inline-flex items-center justify-end gap-1">ไม่มี EQ <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="noBom" class="sortable-th py-3 px-2 text-right bg-amber-50/70 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 cursor-pointer hover:opacity-80 transition">
+                  <div class="inline-flex items-center justify-end gap-1">ไม่มี BOM <span class="sort-icon opacity-40">↕</span></div>
+                </th>
+                <th data-sort="rate" class="sortable-th py-3 pl-2 pr-4 text-right cursor-pointer hover:text-sky-600 dark:hover:text-sky-400 transition">
+                  <div class="inline-flex items-center justify-end gap-1">%ปิดงาน <span class="sort-icon text-sky-600 dark:text-sky-400 font-bold">↓</span></div>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="summaryTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-700/50 text-xs sm:text-sm"></tbody>
+            <tfoot id="summaryTableFoot" class="bg-slate-100/95 dark:bg-slate-800/95 font-heading font-bold text-xs sm:text-sm border-t-2 border-slate-300 dark:border-slate-600"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: Horizontal Bar Chart (5 cols) -->
+      <div class="xl:col-span-5 glass-card rounded-3xl shadow-glass dark:shadow-glass-dark p-4 sm:p-5 flex flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 class="font-heading text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <svg class="h-5 w-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              % ปิดงานแยกตามแผนก
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">คลิกที่แท่งกราฟเพื่อดูรายละเอียดของแผนกนั้น</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+            <span class="inline-flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-sky-600"></span>≥90%</span>
+            <span class="inline-flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>80–89%</span>
+            <span class="inline-flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>70–79%</span>
+            <span class="inline-flex items-center gap-1"><span class="h-2.5 w-2.5 rounded-full bg-rose-500"></span>&lt;70%</span>
+          </div>
+        </div>
+
+        <div id="chartContainer" class="relative w-full" style="height: 620px;">
+          <canvas id="closureChart"></canvas>
+          <div id="chartFallback" class="hidden space-y-2.5 py-2 overflow-y-auto h-full"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-slate-400 dark:text-slate-500 pt-2 pb-4">
+      SAP-PM Maintenance Order Executive Dashboard • ประมวลผลบนเบราว์เซอร์ 100%
+    </footer>
+  </div>
+
+  <!-- ==================== ADMIN PIN MODAL (PIN: 2810) ==================== -->
+  <div id="pinModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/65 backdrop-blur-md p-4">
+    <div class="glass-card rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-white/70 dark:border-slate-700 animate-fade-up relative">
+      <button
+        id="btnClosePinModal"
+        type="button"
+        class="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition cursor-pointer"
+        aria-label="ปิดหน้าต่าง"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <div class="text-center mb-4">
+        <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-sky-600 text-white shadow-lg shadow-indigo-600/30">
+          <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </div>
+        <h3 class="font-heading text-xl font-bold text-slate-900 dark:text-white">เข้าสู่ระบบผู้ดูแล (Admin)</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">กรอกรหัส PIN 4 หลักเพื่ออัปโหลดไฟล์และตั้งค่า</p>
+      </div>
+
+      <!-- 4 Animated PIN Dots -->
+      <div id="pinDotsContainer" class="flex items-center justify-center gap-4 my-5">
+        <div class="pin-dot h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-transparent transition-all duration-200"></div>
+        <div class="pin-dot h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-transparent transition-all duration-200"></div>
+        <div class="pin-dot h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-transparent transition-all duration-200"></div>
+        <div class="pin-dot h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-transparent transition-all duration-200"></div>
+      </div>
+
+      <!-- Error Message -->
+      <div id="pinErrorMsg" class="h-5 text-center text-xs font-heading font-semibold text-rose-500 dark:text-rose-400 mb-3 transition-opacity opacity-0">
+        รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่
+      </div>
+
+      <!-- On-Screen Numeric Keypad -->
+      <div class="grid grid-cols-3 gap-2.5 max-w-[260px] mx-auto select-none">
+        <button type="button" data-pin="1" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">1</button>
+        <button type="button" data-pin="2" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">2</button>
+        <button type="button" data-pin="3" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">3</button>
+        <button type="button" data-pin="4" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">4</button>
+        <button type="button" data-pin="5" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">5</button>
+        <button type="button" data-pin="6" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">6</button>
+        <button type="button" data-pin="7" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">7</button>
+        <button type="button" data-pin="8" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">8</button>
+        <button type="button" data-pin="9" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">9</button>
+
+        <button type="button" id="btnPinClear" class="py-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 border border-slate-200 dark:border-slate-700 font-heading text-xs font-semibold active:scale-95 transition cursor-pointer">
+          ล้าง
+        </button>
+        <button type="button" data-pin="0" class="pin-key py-3 rounded-2xl bg-white/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-500/20 border border-slate-200 dark:border-slate-700 font-heading text-lg font-bold text-slate-800 dark:text-white shadow-sm active:scale-95 transition cursor-pointer">0</button>
+        <button type="button" id="btnPinBackspace" class="py-3 rounded-2xl bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center justify-center active:scale-95 transition cursor-pointer" aria-label="ลบตัวเลข">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
+          </svg>
+        </button>
+      </div>
+
+      <p class="text-center text-[11px] text-slate-400 dark:text-slate-500 mt-4">
+        รองรับการพิมพ์ตัวเลขจากแป้นพิมพ์ (0–9, Backspace, Enter, Esc)
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== DRILL-DOWN MODAL ==================== -->
+  <div id="drillModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-6">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-up">
+      <!-- Header -->
+      <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-800/50">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-lg bg-sky-100 dark:bg-sky-500/20 text-sky-700 dark:text-sky-300 font-heading text-xs font-semibold">Drill-Down</span>
+            <h3 id="drillModalTitle" class="font-heading text-lg sm:text-xl font-bold text-slate-900 dark:text-white">รายละเอียดแผนก</h3>
+          </div>
+          <p id="drillModalSubtitle" class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="btnExportDeptExcel"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-heading text-xs font-semibold shadow-sm transition cursor-pointer"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Export Excel (เฉพาะแผนกนี้)</span>
+          </button>
+          <button
+            id="btnCloseDrill"
+            type="button"
+            class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700 transition cursor-pointer"
+            aria-label="ปิด"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Demo Mode Breakdown View -->
+      <div id="drillDemoView" class="hidden p-6 space-y-5 overflow-y-auto">
+        <div id="drillDemoCards" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+        <div class="rounded-2xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="text-xs sm:text-sm text-sky-900 dark:text-sky-200">
+            <p class="font-heading font-semibold">กำลังแสดงข้อมูลตัวอย่าง (Demo 2569)</p>
+            <p class="text-sky-700 dark:text-sky-300/90 mt-0.5">รายการใบงาน MO รายบรรทัดจะแสดงทันทีเมื่อเข้าสู่ระบบ Admin และอัปโหลดไฟล์ Excel จาก SAP-PM</p>
+          </div>
+          <button
+            id="btnDrillGoAdmin"
+            type="button"
+            class="shrink-0 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-heading text-xs font-semibold transition cursor-pointer"
+          >
+            เข้าสู่ระบบ Admin
+          </button>
+        </div>
+      </div>
+
+      <!-- Real Data Line-Item View -->
+      <div id="drillRealView" class="flex-1 flex flex-col overflow-hidden">
+        <!-- Filter Tabs & Search -->
+        <div class="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div id="drillFilterTabs" class="flex flex-wrap items-center gap-1.5"></div>
+          <div class="relative w-full md:w-72">
+            <svg class="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path stroke-linecap="round" d="M21 21l-4.35-4.35"></path>
+            </svg>
+            <input
+              type="text"
+              id="drillSearchInput"
+              placeholder="ค้นหา Order, Description, FL, EQ..."
+              class="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+          </div>
+        </div>
+
+        <!-- Line Items Table -->
+        <div class="flex-1 overflow-auto">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead class="sticky top-0 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-heading text-xs z-10 shadow-sm">
+              <tr>
+                <th class="py-2.5 px-3">#</th>
+                <th class="py-2.5 px-3">Order</th>
+                <th class="py-2.5 px-3">Created On</th>
+                <th class="py-2.5 px-3">Order Type</th>
+                <th class="py-2.5 px-3">Description</th>
+                <th class="py-2.5 px-3">Functional Loc.</th>
+                <th class="py-2.5 px-3">Equipment</th>
+                <th class="py-2.5 px-3">Assembly</th>
+                <th class="py-2.5 px-3">System status</th>
+                <th class="py-2.5 px-3">สถานะ</th>
+                <th class="py-2.5 px-3">Maint.Plan</th>
+              </tr>
+            </thead>
+            <tbody id="drillTableBody" class="divide-y divide-slate-200/70 dark:divide-slate-800"></tbody>
+          </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span id="drillCountInfo">แสดง 0 รายการ</span>
+          <span>แสดงสูงสุด 500 รายการบนหน้าจอ (Export Excel จะได้ครบทุกรายการ)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== DEPARTMENT CODE MAPPING MODAL ==================== -->
+  <div id="mappingModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-6">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden animate-fade-up">
+      <!-- Header -->
+      <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
+        <div>
+          <h3 class="font-heading text-lg font-bold text-slate-900 dark:text-white">ตั้งค่า Code แผนก (FL + Planner Group → แผนก)</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">บันทึกอัตโนมัติในเบราว์เซอร์และคำนวณกราฟใหม่ทันที</p>
+        </div>
+        <button id="btnCloseMapping" type="button" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-700 transition cursor-pointer" aria-label="ปิด">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Unmapped Quick-Fix Banner -->
+      <div id="unmappedQuickFix" class="hidden px-5 py-3 bg-rose-50 dark:bg-rose-500/10 border-b border-rose-200 dark:border-rose-500/20">
+        <div class="text-xs font-heading font-semibold text-rose-700 dark:text-rose-300 mb-2">
+          พบ Code ที่ยังไม่ได้จับคู่แผนกในไฟล์ที่อัปโหลด (คลิกเพื่อเพิ่มทันที):
+        </div>
+        <div id="unmappedPillsList" class="flex flex-wrap gap-1.5"></div>
+      </div>
+
+      <!-- Add / Edit Form -->
+      <div class="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800">
+        <form id="addMappingForm" class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+          <input
+            type="text"
+            id="newMapCode"
+            placeholder="Code เช่น WTWT"
+            required
+            class="sm:col-span-4 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-mono uppercase text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+          />
+          <input
+            type="text"
+            id="newMapDept"
+            list="deptDatalist"
+            placeholder="ชื่อแผนก เช่น ยานยนต์หนัก"
+            required
+            class="sm:col-span-5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+          />
+          <datalist id="deptDatalist"></datalist>
+          <button
+            type="submit"
+            class="sm:col-span-3 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-heading text-xs sm:text-sm font-semibold transition cursor-pointer"
+          >
+            + เพิ่ม / อัปเดต
+          </button>
+        </form>
+      </div>
+
+      <!-- Search & Reset Bar -->
+      <div class="px-5 py-2.5 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-800">
+        <input
+          type="text"
+          id="mapSearchInput"
+          placeholder="ค้นหา Code หรือ แผนก..."
+          class="flex-1 max-w-xs px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+        />
+        <div class="flex items-center gap-3">
+          <span id="mapTotalCount" class="text-xs text-slate-500 dark:text-slate-400 font-medium">92 รายการ</span>
+          <button
+            id="btnResetMapping"
+            type="button"
+            class="text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 underline underline-offset-2 cursor-pointer"
+          >
+            คืนค่าเริ่มต้น (92 Code)
+          </button>
+        </div>
+      </div>
+
+      <!-- Mapping Table -->
+      <div class="flex-1 overflow-auto p-3 sm:px-5">
+        <table class="w-full text-left border-collapse text-xs sm:text-sm">
+          <thead>
+            <tr class="text-slate-500 dark:text-slate-400 font-heading text-xs border-b border-slate-200 dark:border-slate-800">
+              <th class="py-2 px-2">Code (FL + PG)</th>
+              <th class="py-2 px-2">แผนก</th>
+              <th class="py-2 px-2 text-right w-24">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody id="mappingTableBody" class="divide-y divide-slate-200/60 dark:divide-slate-800"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== APPLICATION SCRIPT ==================== -->
+  <script>
+    'use strict';
+
+    // =========================================================================
+    // 1. CONSTANTS: 92-ENTRY SAP-PM MAPPING, 17 PRIMARY DEPTS & EXACT DEMO DATA
+    // =========================================================================
+    const ADMIN_PIN = '2810';
+    const ADMIN_AUTH_KEY = 'sap_pm_admin_logged_in';
+    const THEME_KEY = 'sap_pm_theme';
+    const MAPPING_KEY = 'sap_pm_dept_map_v2';
+    const IDB_NAME = 'SAP_PM_Dashboard_DB_v2';
+    const IDB_STORE = 'uploaded_data';
+    const IDB_KEY = 'latest_upload';
+
+    const DEFAULT_CODE_MAPPING = {
+      PKPK: 'บรรจุ',
+      VCVC: 'เคี่ยวและปั่นรีไฟน์',
+      FLFL: 'น้ำเชื่อมรีไฟน์',
+      MLML: 'ลูกหีบ A',
+      CSCS: 'ไซโล',
+      M2ML: 'ลูกหีบ B',
+      FLIN: 'เครื่องมือควบคุม',
+      CTCT: 'หม้อปั่นดิบ A',
+      VPVP: 'หม้อเคี่ยวดิบ A',
+      V2ME: 'เครื่องกล',
+      V2VP: 'หม้อเคี่ยวดิบ B',
+      E2EV: 'หม้อต้มดิบ B',
+      VCIN: 'เครื่องมือควบคุม',
+      ININ: 'เครื่องมือควบคุม',
+      EVEV: 'หม้อต้มดิบ A',
+      EEEE: 'ไฟฟ้า',
+      EVIN: 'เครื่องมือควบคุม',
+      C2CT: 'หม้อปั่นดิบ B',
+      M2IN: 'เครื่องมือควบคุม',
+      V2IN: 'เครื่องมือควบคุม',
+      EVME: 'เครื่องกล',
+      VPME: 'เครื่องกล',
+      E2IN: 'เครื่องมือควบคุม',
+      VCEE: 'ไฟฟ้า',
+      M2ME: 'เครื่องกล',
+      E2ME: 'เครื่องกล',
+      MMME: 'เครื่องกล',
+      CTME: 'เครื่องกล',
+      MLME: 'เครื่องกล',
+      C2ME: 'เครื่องกล',
+      MLIN: 'เครื่องมือควบคุม',
+      E2PE2: 'หม้อต้มดิบ B',
+      EEEE1: 'ไฟฟ้า',
+      MLPML: 'ลูกหีบ A',
+      FLEE: 'ไฟฟ้า',
+      IN: 'เครื่องมือควบคุม',
+      VPIN: 'เครื่องมือควบคุม',
+      C2IN: 'เครื่องมือควบคุม',
+      MLEE: 'ไฟฟ้า',
+      MLEE1: 'ไฟฟ้า',
+      MMML: 'เครื่องกล',
+      M2PM2: 'ลูกหีบ B',
+      MLPM2: 'ลูกหีบ A',
+      M2EE1: 'ไฟฟ้า',
+      VCFL: 'เคี่ยวและปั่นรีไฟน์',
+      CSIN: 'เครื่องมือควบคุม',
+      CTIN: 'เครื่องมือควบคุม',
+      M2EE: 'ไฟฟ้า',
+      MMIN: 'เครื่องมือควบคุม',
+      EEIN: 'เครื่องมือควบคุม',
+      CTEE: 'ไฟฟ้า',
+      C2EE: 'ไฟฟ้า',
+      PKIN: 'เครื่องมือควบคุม',
+      VPEE: 'ไฟฟ้า',
+      E2EE: 'ไฟฟ้า',
+      VCME: 'เครื่องกล',
+      FLME: 'เครื่องกล',
+      PKME: 'เครื่องกล',
+      CSEE: 'ไฟฟ้า',
+      PKEE: 'ไฟฟ้า',
+      CSME: 'เครื่องกล',
+      MMMM1: 'เครื่องกล',
+      E2ML: 'ลูกหีบ A',
+      MMEE: 'ไฟฟ้า',
+      VCVP: 'หม้อเคี่ยวดิบ A',
+      MMVP: 'หม้อเคี่ยวดิบ A',
+      ININ1: 'เครื่องมือควบคุม',
+      VCPK: 'บรรจุ',
+      INML: 'ลูกหีบ A',
+      V2EE: 'ไฟฟ้า',
+      C2PC2: 'หม้อปั่นดิบ B',
+      CTEE1: 'ไฟฟ้า',
+      C2EE1: 'ไฟฟ้า',
+      EVEE1: 'ไฟฟ้า',
+      WTIN1: 'เครื่องมือควบคุม',
+      WTIN: 'เครื่องมือควบคุม',
+      VCEE1: 'ไฟฟ้า',
+      EVEE: 'ไฟฟ้า',
+      V2EE1: 'ไฟฟ้า',
+      AVAV1: 'ยานยนต์หนัก',
+      WHWH1: 'คลังสินค้า',
+      HVAV1: 'ยานยนต์หนัก',
+      AVAV: 'ยานยนต์หนัก',
+      CSPCS: 'ไซโล',
+      VCVR: 'เคี่ยวและปั่นรีไฟน์',
+      FLPFL: 'น้ำเชื่อมรีไฟน์',
+      WTWT1: 'ยานยนต์หนัก',
+      VPEE1: 'ไฟฟ้า',
+      WTWT: 'ยานยนต์หนัก',
+      VPPVP: 'หม้อเคี่ยวดิบ A',
+      WTAV1: 'ยานยนต์หนัก',
+      PKEE1: 'ไฟฟ้า',
+    };
+
+    const PRIMARY_17_DEPTS = [
+      'หม้อปั่นดิบ A',
+      'ยานยนต์หนัก',
+      'หม้อปั่นดิบ B',
+      'หม้อต้มดิบ B',
+      'หม้อต้มดิบ A',
+      'ไซโล',
+      'หม้อเคี่ยวดิบ A',
+      'หม้อเคี่ยวดิบ B',
+      'ไฟฟ้า',
+      'ลูกหีบ A',
+      'เคี่ยวและปั่นรีไฟน์',
+      'น้ำเชื่อมรีไฟน์',
+      'เครื่องมือควบคุม',
+      'ลูกหีบ B',
+      'คลังสินค้า',
+      'บรรจุ',
+      'เครื่องกล',
+    ];
+
+    // Exact Pre-loaded 2569 Demo Dataset (Total 2,256 | Manual 1,919 | Maint.Plan 337 | Closed 1,607 | Open 649 | 71.23%)
+    const DEMO_SUMMARY = [
+      { department: 'หม้อปั่นดิบ A', manual: 51, maintPlan: 208, total: 259, closed: 246, open: 13, noEq: 5, noBom: 26, rate: 94.98 },
+      { department: 'ยานยนต์หนัก', manual: 308, maintPlan: 11, total: 319, closed: 289, open: 30, noEq: 26, noBom: 27, rate: 90.60 },
+      { department: 'หม้อปั่นดิบ B', manual: 56, maintPlan: 26, total: 82, closed: 74, open: 8, noEq: 7, noBom: 9, rate: 90.24 },
+      { department: 'หม้อต้มดิบ B', manual: 10, maintPlan: 48, total: 58, closed: 52, open: 6, noEq: 0, noBom: 0, rate: 89.66 },
+      { department: 'หม้อต้มดิบ A', manual: 109, maintPlan: 0, total: 109, closed: 95, open: 14, noEq: 0, noBom: 0, rate: 87.16 },
+      { department: 'ไซโล', manual: 138, maintPlan: 0, total: 138, closed: 112, open: 26, noEq: 0, noBom: 0, rate: 81.16 },
+      { department: 'หม้อเคี่ยวดิบ A', manual: 77, maintPlan: 0, total: 77, closed: 62, open: 15, noEq: 0, noBom: 0, rate: 80.52 },
+      { department: 'หม้อเคี่ยวดิบ B', manual: 25, maintPlan: 0, total: 25, closed: 20, open: 5, noEq: 0, noBom: 0, rate: 80.00 },
+      { department: 'ไฟฟ้า', manual: 250, maintPlan: 0, total: 250, closed: 188, open: 62, noEq: 5, noBom: 54, rate: 75.20 },
+      { department: 'ลูกหีบ A', manual: 206, maintPlan: 0, total: 206, closed: 146, open: 60, noEq: 0, noBom: 0, rate: 70.87 },
+      { department: 'เคี่ยวและปั่นรีไฟน์', manual: 191, maintPlan: 0, total: 191, closed: 112, open: 79, noEq: 28, noBom: 32, rate: 58.64 },
+      { department: 'น้ำเชื่อมรีไฟน์', manual: 92, maintPlan: 0, total: 92, closed: 46, open: 46, noEq: 1, noBom: 1, rate: 50.00 },
+      { department: 'เครื่องมือควบคุม', manual: 51, maintPlan: 0, total: 51, closed: 22, open: 29, noEq: 1, noBom: 7, rate: 43.14 },
+      { department: 'ลูกหีบ B', manual: 184, maintPlan: 0, total: 184, closed: 74, open: 110, noEq: 7, noBom: 10, rate: 40.22 },
+      { department: 'คลังสินค้า', manual: 10, maintPlan: 44, total: 54, closed: 19, open: 35, noEq: 1, noBom: 1, rate: 35.19 },
+      { department: 'บรรจุ', manual: 127, maintPlan: 0, total: 127, closed: 42, open: 85, noEq: 3, noBom: 4, rate: 33.07 },
+      { department: 'เครื่องกล', manual: 34, maintPlan: 0, total: 34, closed: 8, open: 26, noEq: 0, noBom: 5, rate: 23.53 },
+    ];
+
+    // Strict header-name matching aliases (case-insensitive, trimmed, order-independent)
+    const COLUMN_ALIASES = {
+      functionalLoc: ['functional loc.', 'functional loc', 'functional location'],
+      plannerGroup: ['planner group', 'planner grp', 'planner grp.'],
+      systemStatus: ['system status'],
+      order: ['order', 'order number'],
+      createdOn: ['created on'],
+      orderType: ['order type'],
+      description: ['description', 'short text'],
+      equipment: ['equipment'],
+      assembly: ['assembly'],
+      maintenancePlan: ['maintenanceplan', 'maintenance plan', 'maintplan', 'maint.plan', 'maint. plan'],
+    };
+
+    // =========================================================================
+    // 2. APPLICATION STATE
+    // =========================================================================
+    const state = {
+      isAdmin: false,
+      pinBuffer: '',
+      pinModalOpen: false,
+      isDemo: true,
+      validSheets: [],
+      currentSheetName: '',
+      fileName: '',
+      uploadedAt: '',
+      rawRecords: [],
+      matchedColumns: {},
+      codeMapping: { ...DEFAULT_CODE_MAPPING },
+      unmappedCodes: {},
+      onlyPrimary17: true,
+      searchQuery: '',
+      sortBy: 'rate',
+      sortDir: 'desc',
+      summaryRows: [],
+      drillDept: null,
+      drillFilter: 'all',
+      drillSearch: '',
+      chartInstance: null,
+    };
+
+    // =========================================================================
+    // 3. SAFE STORAGE & INDEXEDDB HELPERS (SANDBOX-SAFE)
+    // =========================================================================
+    function safeStorageGet(key) {
+      try {
+        const val = window.localStorage.getItem(key);
+        if (val !== null) return val;
+      } catch (e) { /* ignore SecurityError */ }
+      try {
+        return window.sessionStorage.getItem(key);
+      } catch (e) { /* ignore SecurityError */ }
+      return null;
+    }
+
+    function safeStorageSet(key, value) {
+      try { window.localStorage.setItem(key, value); } catch (e) { /* ignore */ }
+      try { window.sessionStorage.setItem(key, value); } catch (e) { /* ignore */ }
+    }
+
+    function safeStorageRemove(key) {
+      try { window.localStorage.removeItem(key); } catch (e) { /* ignore */ }
+      try { window.sessionStorage.removeItem(key); } catch (e) { /* ignore */ }
+    }
+
+    function openDashboardDB() {
+      return new Promise((resolve, reject) => {
+        try {
+          if (!window.indexedDB) {
+            reject(new Error('IndexedDB unavailable'));
+            return;
+          }
+          const req = window.indexedDB.open(IDB_NAME, 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+              db.createObjectStore(IDB_STORE);
+            }
+          };
+          req.onsuccess = (e) => resolve(e.target.result);
+          req.onerror = (e) => reject(e.target.error || new Error('IDB open error'));
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }
+
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('IDB timeout')), ms)),
+      ]);
+    }
+
+    async function saveUploadedDataToDB(payload) {
+      try {
+        const db = await withTimeout(openDashboardDB(), 1000);
+        await withTimeout(
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            tx.objectStore(IDB_STORE).put(payload, IDB_KEY);
+            tx.oncomplete = () => resolve();
+            tx.onerror = (e) => reject(e.target.error);
+          }),
+          1000
+        );
+        db.close();
+      } catch (err) {
+        // Non-fatal: data remains active in memory
+      }
+    }
+
+    async function loadUploadedDataFromDB() {
+      try {
+        const db = await withTimeout(openDashboardDB(), 1000);
+        const result = await withTimeout(
+          new Promise((resolve, reject) => {
+            const tx = db.transaction(IDB_STORE, 'readonly');
+            const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = (e) => reject(e.target.error);
+          }),
+          1000
+        );
+        db.close();
+        return result;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    // =========================================================================
+    // 4. UI UTILITIES: ESCAPE, TOAST, LIVE THAI CLOCK & THEME
+    // =========================================================================
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const styles = {
+        success: 'bg-emerald-600 text-white border-emerald-500',
+        error: 'bg-rose-600 text-white border-rose-500',
+        warning: 'bg-amber-500 text-white border-amber-400',
+        info: 'bg-slate-800 dark:bg-slate-700 text-white border-slate-700',
+      };
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl border shadow-xl text-xs sm:text-sm font-medium animate-fade-up ${styles[type] || styles.info}`;
+      toast.innerHTML = `<span class="flex-1">${escapeHtml(message)}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = 'all 0.25s ease';
+        setTimeout(() => toast.remove(), 260);
+      }, 3600);
+    }
+
+    function getThaiTimestamp() {
+      const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+      const now = new Date();
+      const d = now.getDate();
+      const m = months[now.getMonth()];
+      const y = now.getFullYear() + 543;
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      return `${d} ${m} ${y} ${hh}:${mm}:${ss}`;
+    }
+
+    function updateThaiClock() {
+      const el = document.getElementById('liveClock');
+      if (el) el.textContent = getThaiTimestamp();
+    }
+
+    function initTheme() {
+      const saved = safeStorageGet(THEME_KEY);
+      if (saved === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+
+    function toggleTheme() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      safeStorageSet(THEME_KEY, isDark ? 'dark' : 'light');
+      renderChartSafe(state.summaryRows);
+    }
+
+    function loadCodeMapping() {
+      const saved = safeStorageGet(MAPPING_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+            state.codeMapping = parsed;
+            return;
+          }
+        } catch (e) { /* fallback */ }
+      }
+      state.codeMapping = { ...DEFAULT_CODE_MAPPING };
+    }
+
+    function saveCodeMapping() {
+      try {
+        safeStorageSet(MAPPING_KEY, JSON.stringify(state.codeMapping));
+      } catch (e) { /* ignore */ }
+    }
+
+    // =========================================================================
+    // 5. ADMIN MODE & PIN MODAL LOGIC (PIN: 2810)
+    // =========================================================================
+    function applyAdminUI() {
+      const adminPanel = document.getElementById('adminControlPanel');
+      const btnAdminLogin = document.getElementById('btnAdminLogin');
+      const headerAdminControls = document.getElementById('headerAdminControls');
+
+      if (state.isAdmin) {
+        adminPanel.classList.remove('hidden');
+        btnAdminLogin.classList.add('hidden');
+        headerAdminControls.classList.remove('hidden');
+        headerAdminControls.classList.add('inline-flex');
+      } else {
+        adminPanel.classList.add('hidden');
+        btnAdminLogin.classList.remove('hidden');
+        headerAdminControls.classList.add('hidden');
+        headerAdminControls.classList.remove('inline-flex');
+      }
+      renderFileStatusBar();
+    }
+
+    function openPinModal() {
+      state.pinBuffer = '';
+      state.pinModalOpen = true;
+      renderPinDots(false);
+      document.getElementById('pinErrorMsg').classList.add('opacity-0');
+      const modal = document.getElementById('pinModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closePinModal() {
+      state.pinModalOpen = false;
+      state.pinBuffer = '';
+      const modal = document.getElementById('pinModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function renderPinDots(isSuccess) {
+      const dots = document.querySelectorAll('#pinDotsContainer .pin-dot');
+      dots.forEach((dot, idx) => {
+        if (isSuccess) {
+          dot.className = 'pin-dot h-4 w-4 rounded-full border-2 border-emerald-500 bg-emerald-500 scale-110 transition-all duration-200';
+        } else if (idx < state.pinBuffer.length) {
+          dot.className = 'pin-dot h-4 w-4 rounded-full border-2 border-indigo-600 dark:border-sky-400 bg-indigo-600 dark:bg-sky-400 scale-110 transition-all duration-200';
+        } else {
+          dot.className = 'pin-dot h-4 w-4 rounded-full border-2 border-slate-300 dark:border-slate-600 bg-transparent transition-all duration-200';
+        }
+      });
+    }
+
+    function handlePinDigit(digit) {
+      if (!state.pinModalOpen || state.pinBuffer.length >= 4) return;
+      document.getElementById('pinErrorMsg').classList.add('opacity-0');
+      state.pinBuffer += String(digit);
+      renderPinDots(false);
+      if (state.pinBuffer.length === 4) {
+        setTimeout(verifyPin, 120);
+      }
+    }
+
+    function handlePinBackspace() {
+      if (!state.pinModalOpen || state.pinBuffer.length === 0) return;
+      state.pinBuffer = state.pinBuffer.slice(0, -1);
+      renderPinDots(false);
+    }
+
+    function handlePinClear() {
+      if (!state.pinModalOpen) return;
+      state.pinBuffer = '';
+      document.getElementById('pinErrorMsg').classList.add('opacity-0');
+      renderPinDots(false);
+    }
+
+    function verifyPin() {
+      if (state.pinBuffer === ADMIN_PIN) {
+        renderPinDots(true);
+        state.isAdmin = true;
+        safeStorageSet(ADMIN_AUTH_KEY, 'true');
+        setTimeout(() => {
+          closePinModal();
+          applyAdminUI();
+          showToast('เข้าสู่ระบบ Admin สำเร็จ', 'success');
+        }, 180);
+      } else {
+        const dotsWrap = document.getElementById('pinDotsContainer');
+        const errEl = document.getElementById('pinErrorMsg');
+        errEl.classList.remove('opacity-0');
+        dotsWrap.classList.remove('animate-shake');
+        void dotsWrap.offsetWidth;
+        dotsWrap.classList.add('animate-shake');
+        setTimeout(() => {
+          state.pinBuffer = '';
+          renderPinDots(false);
+        }, 420);
+      }
+    }
+
+    function logoutAdmin() {
+      state.isAdmin = false;
+      safeStorageRemove(ADMIN_AUTH_KEY);
+      closeMappingModal();
+      applyAdminUI();
+      showToast('ออกจากระบบ Admin แล้ว', 'info');
+    }
+
+    // =========================================================================
+    // 6. SAP-PM EXCEL / CSV PARSING ENGINE (SHEETJS)
+    // =========================================================================
+    function setUploadProcessing(isBusy) {
+      const icon = document.getElementById('dropZoneIcon');
+      const spinner = document.getElementById('dropZoneSpinner');
+      if (!icon || !spinner) return;
+      if (isBusy) {
+        icon.classList.add('hidden');
+        spinner.classList.remove('hidden');
+      } else {
+        icon.classList.remove('hidden');
+        spinner.classList.add('hidden');
+      }
+    }
+
+    function normalizeHeader(val) {
+      return String(val ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function detectHeaderRow(rows2D) {
+      const limit = Math.min(rows2D.length, 10);
+      for (let r = 0; r < limit; r++) {
+        const row = rows2D[r] || [];
+        const normalizedCells = row.map(normalizeHeader);
+        const hasFL = normalizedCells.some((c) => COLUMN_ALIASES.functionalLoc.includes(c));
+        const hasSys = normalizedCells.some((c) => COLUMN_ALIASES.systemStatus.includes(c));
+        const hasPG = normalizedCells.some((c) => COLUMN_ALIASES.plannerGroup.includes(c));
+        const hasOrder = normalizedCells.some((c) => COLUMN_ALIASES.order.includes(c));
+
+        if (hasFL && hasSys && (hasPG || hasOrder)) {
+          const colIdx = {};
+          const matchedNames = {};
+          row.forEach((rawHeader, idx) => {
+            const norm = normalizeHeader(rawHeader);
+            if (!norm) return;
+            for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
+              if (colIdx[key] === undefined && aliases.includes(norm)) {
+                colIdx[key] = idx;
+                matchedNames[key] = String(rawHeader).trim();
+              }
+            }
+          });
+          return { headerRowIndex: r, colIdx, matchedNames };
+        }
+      }
+      return null;
+    }
+
+    function formatCellDate(val) {
+      if (!val) return '';
+      if (val instanceof Date && !isNaN(val)) {
+        const d = String(val.getDate()).padStart(2, '0');
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const y = val.getFullYear();
+        return `${d}/${m}/${y}`;
+      }
+      return String(val).trim();
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+      if (typeof XLSX === 'undefined') {
+        showToast('ไม่พบไลบรารี SheetJS กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่', 'error');
+        return;
+      }
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['xlsx', 'xls', 'csv'].includes(ext)) {
+        showToast('รองรับเฉพาะไฟล์ .xlsx, .xls หรือ .csv เท่านั้น', 'error');
+        return;
+      }
+
+      setUploadProcessing(true);
+      showToast(`กำลังอ่านไฟล์ ${file.name}...`, 'info');
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const validSheets = [];
+
+          for (const sheetName of workbook.SheetNames) {
+            const ws = workbook.Sheets[sheetName];
+            const rows2D = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            const detected = detectHeaderRow(rows2D);
+            if (detected) {
+              validSheets.push({ name: sheetName, rows2D, ...detected });
+            }
+          }
+
+          if (validSheets.length === 0) {
+            setUploadProcessing(false);
+            showToast('ไม่พบหัวคอลัมน์ SAP-PM (Functional Loc., System status, Planner Group / Order) ใน 10 แถวแรก', 'error');
+            return;
+          }
+
+          state.validSheets = validSheets;
+          state.fileName = file.name;
+          state.uploadedAt = getThaiTimestamp();
+          state.isDemo = false;
+
+          // Populate sheet selector if multiple valid sheets exist
+          const sheetSelWrap = document.getElementById('sheetSelectorWrap');
+          const sheetSel = document.getElementById('sheetSelector');
+          sheetSel.innerHTML = '';
+          validSheets.forEach((s) => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = s.name;
+            sheetSel.appendChild(opt);
+          });
+          if (validSheets.length > 1) {
+            sheetSelWrap.classList.remove('hidden');
+            sheetSelWrap.classList.add('inline-flex');
+          } else {
+            sheetSelWrap.classList.add('hidden');
+            sheetSelWrap.classList.remove('inline-flex');
+          }
+
+          loadParsedSheet(validSheets[0]);
+          setUploadProcessing(false);
+          showToast(`อัปโหลดสำเร็จ! ประมวลผลข้อมูล ${state.rawRecords.length.toLocaleString()} รายการ`, 'success');
+        } catch (err) {
+          console.error(err);
+          setUploadProcessing(false);
+          showToast('ไม่สามารถอ่านไฟล์ Excel/CSV ได้ กรุณาตรวจสอบรูปแบบไฟล์', 'error');
+        }
+      };
+      reader.onerror = () => {
+        setUploadProcessing(false);
+        showToast('เกิดข้อผิดพลาดระหว่างการอ่านไฟล์', 'error');
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function loadParsedSheet(sheetInfo) {
+      state.currentSheetName = sheetInfo.name;
+      state.matchedColumns = sheetInfo.matchedNames;
+      const { rows2D, headerRowIndex, colIdx } = sheetInfo;
+
+      const records = [];
+      for (let i = headerRowIndex + 1; i < rows2D.length; i++) {
+        const row = rows2D[i];
+        if (!row || row.length === 0) continue;
+
+        const flRaw = colIdx.functionalLoc !== undefined ? String(row[colIdx.functionalLoc] ?? '').trim() : '';
+        const pgRaw = colIdx.plannerGroup !== undefined ? String(row[colIdx.plannerGroup] ?? '').trim() : '';
+        const sysRaw = colIdx.systemStatus !== undefined ? String(row[colIdx.systemStatus] ?? '').trim() : '';
+        const eqRaw = colIdx.equipment !== undefined ? String(row[colIdx.equipment] ?? '').trim() : '';
+        const asmRaw = colIdx.assembly !== undefined ? String(row[colIdx.assembly] ?? '').trim() : '';
+        const mpRaw = colIdx.maintenancePlan !== undefined ? String(row[colIdx.maintenancePlan] ?? '').trim() : '';
+        const orderRaw = colIdx.order !== undefined ? String(row[colIdx.order] ?? '').trim() : '';
+
+        // Skip empty trailing rows
+        if (!flRaw && !sysRaw && !orderRaw) continue;
+
+        // Exact SAP-PM Logic: FL = MID(FL, 5, 2) => substring(4, 6)
+        const flCode = flRaw.substring(4, 6).toUpperCase();
+        const pgCode = pgRaw.toUpperCase();
+        const combinedCode = flCode + pgCode;
+
+        // Exact Closed Status Rule
+        const sysUpper = sysRaw.toUpperCase();
+        const sys4 = sysUpper.substring(0, 4);
+        const isClosed =
+          sys4 === 'TECO' ||
+          sys4 === 'CLSD' ||
+          sysUpper.startsWith('INPR CAN') ||
+          sysUpper.startsWith('TECO CAN');
+
+        const isMaintPlan = mpRaw !== '';
+        const noEq = !flRaw || !eqRaw;
+        const noBom = !flRaw || !asmRaw;
+
+        records.push({
+          functionalLoc: flRaw,
+          plannerGroup: pgRaw,
+          code: combinedCode,
+          systemStatus: sysRaw,
+          equipment: eqRaw,
+          assembly: asmRaw,
+          maintenancePlan: mpRaw,
+          isClosed,
+          isMaintPlan,
+          noEq,
+          noBom,
+          order: orderRaw,
+          orderType: colIdx.orderType !== undefined ? String(row[colIdx.orderType] ?? '').trim() : '',
+          description: colIdx.description !== undefined ? String(row[colIdx.description] ?? '').trim() : '',
+          createdOn: colIdx.createdOn !== undefined ? formatCellDate(row[colIdx.createdOn]) : '',
+        });
+      }
+
+      state.rawRecords = records;
+      renderFileStatusBar();
+      recalculateAndRender();
+
+      // Persist uploaded dataset asynchronously in IndexedDB
+      saveUploadedDataToDB({
+        fileName: state.fileName,
+        currentSheetName: state.currentSheetName,
+        uploadedAt: state.uploadedAt,
+        matchedColumns: state.matchedColumns,
+        rawRecords: state.rawRecords,
+      });
+    }
+
+    function renderFileStatusBar() {
+      const bar = document.getElementById('fileStatusBar');
+      const badge = document.getElementById('dataSourceBadge');
+
+      if (state.isDemo) {
+        bar.classList.add('hidden');
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30';
+        badge.innerHTML = `<span>ข้อมูลตัวอย่าง (Demo 2569)</span>`;
+        return;
+      }
+
+      const timeSuffix = state.uploadedAt ? ` • ${state.uploadedAt}` : '';
+      badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30';
+      badge.innerHTML = `<span>ไฟล์: ${escapeHtml(state.fileName)}${escapeHtml(timeSuffix)}</span>`;
+
+      if (state.isAdmin) {
+        bar.classList.remove('hidden');
+        document.getElementById('loadedFileName').textContent = state.fileName;
+        document.getElementById('loadedRowCount').textContent = `(${state.rawRecords.length.toLocaleString()} รายการ)`;
+
+        const coreCols = [
+          { key: 'functionalLoc', label: 'Functional Loc.' },
+          { key: 'plannerGroup', label: 'Planner Group' },
+          { key: 'systemStatus', label: 'System status' },
+          { key: 'order', label: 'Order' },
+          { key: 'equipment', label: 'Equipment' },
+          { key: 'assembly', label: 'Assembly' },
+          { key: 'maintenancePlan', label: 'MaintenancePlan' },
+        ];
+        document.getElementById('matchedColumnsPills').innerHTML = coreCols
+          .map((c) => {
+            const matched = state.matchedColumns[c.key];
+            if (matched) {
+              return `<span class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30">✓ ${escapeHtml(c.label)}</span>`;
+            }
+            return `<span class="px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30">- ${escapeHtml(c.label)}</span>`;
+          })
+          .join('');
+      } else {
+        bar.classList.add('hidden');
+      }
+    }
+
+    // =========================================================================
+    // 7. AGGREGATION & CALCULATION ENGINE
+    // =========================================================================
+    function recalculateAndRender() {
+      let aggregated = [];
+      const unmapped = {};
+      let extraDeptRowsCount = 0;
+
+      if (state.isDemo) {
+        aggregated = DEMO_SUMMARY.map((d) => ({ ...d, records: [] }));
+        state.unmappedCodes = {};
+      } else {
+        const deptMap = new Map();
+
+        if (state.onlyPrimary17) {
+          PRIMARY_17_DEPTS.forEach((dept) => {
+            deptMap.set(dept, {
+              department: dept,
+              manual: 0,
+              maintPlan: 0,
+              total: 0,
+              closed: 0,
+              open: 0,
+              noEq: 0,
+              noBom: 0,
+              rate: 0,
+              records: [],
+            });
+          });
+        }
+
+        for (const rec of state.rawRecords) {
+          const mappedDept = state.codeMapping[rec.code];
+          let deptName = mappedDept;
+          if (!deptName) {
+            const unmappedKey = rec.code || '(ว่าง)';
+            unmapped[unmappedKey] = (unmapped[unmappedKey] || 0) + 1;
+            deptName = `ยังไม่ระบุแผนก (${unmappedKey})`;
+          }
+          rec.department = deptName;
+
+          const isPrimary = PRIMARY_17_DEPTS.includes(deptName);
+          if (state.onlyPrimary17 && !isPrimary) {
+            extraDeptRowsCount++;
+            continue;
+          }
+
+          if (!deptMap.has(deptName)) {
+            deptMap.set(deptName, {
+              department: deptName,
+              manual: 0,
+              maintPlan: 0,
+              total: 0,
+              closed: 0,
+              open: 0,
+              noEq: 0,
+              noBom: 0,
+              rate: 0,
+              records: [],
+            });
+          }
+
+          const bucket = deptMap.get(deptName);
+          bucket.total++;
+          if (rec.isMaintPlan) bucket.maintPlan++;
+          if (rec.isClosed) bucket.closed++;
+          else bucket.open++;
+          if (rec.noEq) bucket.noEq++;
+          if (rec.noBom) bucket.noBom++;
+          bucket.records.push(rec);
+        }
+
+        state.unmappedCodes = unmapped;
+        aggregated = Array.from(deptMap.values()).map((b) => {
+          b.manual = b.total - b.maintPlan;
+          b.rate = b.total > 0 ? (b.closed / b.total) * 100 : 0;
+          return b;
+        });
+      }
+
+      // Unmapped / Extra badges
+      const unmappedKeys = Object.keys(state.unmappedCodes);
+      const headerBadge = document.getElementById('unmappedHeaderBadge');
+      const extraBtn = document.getElementById('btnExtraInfoBadge');
+      const extraText = document.getElementById('extraInfoText');
+
+      if (headerBadge) {
+        if (unmappedKeys.length > 0) {
+          headerBadge.textContent = unmappedKeys.length;
+          headerBadge.classList.remove('hidden');
+        } else {
+          headerBadge.classList.add('hidden');
+        }
+      }
+
+      if (!state.isDemo && (unmappedKeys.length > 0 || extraDeptRowsCount > 0)) {
+        const parts = [];
+        if (unmappedKeys.length > 0) parts.push(`พบ ${unmappedKeys.length} Code ยังไม่จับคู่`);
+        if (state.onlyPrimary17 && extraDeptRowsCount > 0) parts.push(`ซ่อนข้อมูลนอก 17 แผนก ${extraDeptRowsCount.toLocaleString()} รายการ`);
+        extraText.textContent = parts.join(' • ');
+        extraBtn.classList.remove('hidden');
+      } else {
+        extraBtn.classList.add('hidden');
+      }
+
+      // Totals before search filter
+      const totals = aggregated.reduce(
+        (acc, r) => {
+          acc.manual += r.manual;
+          acc.maintPlan += r.maintPlan;
+          acc.total += r.total;
+          acc.closed += r.closed;
+          acc.open += r.open;
+          acc.noEq += r.noEq;
+          acc.noBom += r.noBom;
+          return acc;
+        },
+        { manual: 0, maintPlan: 0, total: 0, closed: 0, open: 0, noEq: 0, noBom: 0 }
+      );
+      totals.rate = totals.total > 0 ? (totals.closed / totals.total) * 100 : 0;
+
+      // Department search filter
+      let displayRows = aggregated;
+      if (state.searchQuery.trim() !== '') {
+        const q = state.searchQuery.trim().toLowerCase();
+        displayRows = aggregated.filter((r) => r.department.toLowerCase().includes(q));
+      }
+
+      // Sort rows (default: rate desc, tie-breaker: total desc)
+      displayRows.sort((a, b) => {
+        const valA = a[state.sortBy];
+        const valB = b[state.sortBy];
+        let cmp = 0;
+        if (typeof valA === 'string') {
+          cmp = state.sortDir === 'asc' ? valA.localeCompare(valB, 'th') : valB.localeCompare(valA, 'th');
+        } else {
+          cmp = state.sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+        if (cmp === 0 && state.sortBy !== 'total') {
+          return b.total - a.total;
+        }
+        return cmp;
+      });
+
+      state.summaryRows = displayRows;
+
+      // Render KPIs, Table & Chart
+      renderKPICards(totals);
+      renderTable(displayRows, totals);
+      renderChartSafe(displayRows);
+    }
+
+    // =========================================================================
+    // 8. KPI CARDS & SUMMARY TABLE RENDERING
+    // =========================================================================
+    function renderKPICards(totals) {
+      document.getElementById('kpiManual').textContent = totals.manual.toLocaleString();
+      document.getElementById('kpiMaintPlan').textContent = totals.maintPlan.toLocaleString();
+      document.getElementById('kpiTotal').textContent = totals.total.toLocaleString();
+      document.getElementById('kpiClosed').textContent = totals.closed.toLocaleString();
+      document.getElementById('kpiOpen').textContent = totals.open.toLocaleString();
+      document.getElementById('kpiRate').textContent = `${totals.rate.toFixed(2)}%`;
+
+      const manualPct = totals.total > 0 ? (totals.manual / totals.total) * 100 : 0;
+      const planPct = totals.total > 0 ? (totals.maintPlan / totals.total) * 100 : 0;
+      const openPct = totals.total > 0 ? (totals.open / totals.total) * 100 : 0;
+
+      document.getElementById('kpiManualBar').style.width = `${manualPct.toFixed(1)}%`;
+      document.getElementById('kpiPlanBar').style.width = `${planPct.toFixed(1)}%`;
+      document.getElementById('kpiManualPct').textContent = `Manual ${manualPct.toFixed(1)}%`;
+      document.getElementById('kpiPlanPct').textContent = `Plan ${planPct.toFixed(1)}%`;
+
+      document.getElementById('kpiClosedBar').style.width = `${totals.rate.toFixed(2)}%`;
+      document.getElementById('kpiOpenBar').style.width = `${openPct.toFixed(2)}%`;
+      document.getElementById('kpiOpenSub').textContent = `คิดเป็น ${openPct.toFixed(2)}% ของทั้งหมด`;
+
+      // Circular progress ring (r=32 => circumference = 201.06)
+      const circumference = 2 * Math.PI * 32;
+      const offset = circumference - (Math.min(totals.rate, 100) / 100) * circumference;
+      document.getElementById('kpiRingCircle').style.strokeDashoffset = offset.toFixed(2);
+    }
+
+    function getRateBadgeClass(rate) {
+      if (rate >= 90) return 'bg-gradient-to-r from-sky-600 to-blue-600 text-white shadow-sm shadow-sky-600/30';
+      if (rate >= 80) return 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30';
+      if (rate >= 70) return 'bg-amber-500 text-white shadow-sm shadow-amber-500/30';
+      return 'bg-rose-600 text-white shadow-sm shadow-rose-600/30';
+    }
+
+    function renderTable(rows, totals) {
+      const tbody = document.getElementById('summaryTableBody');
+      const tfoot = document.getElementById('summaryTableFoot');
+
+      if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="py-10 text-center text-slate-400">ไม่พบข้อมูลแผนกที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
+      } else {
+        tbody.innerHTML = rows
+          .map((r, idx) => {
+            const noEqClass = r.noEq > 0
+              ? 'font-bold text-orange-600 dark:text-orange-400 bg-amber-100/70 dark:bg-amber-500/15'
+              : 'text-slate-400 dark:text-slate-500 bg-amber-50/40 dark:bg-amber-500/5';
+            const noBomClass = r.noBom > 0
+              ? 'font-bold text-rose-600 dark:text-rose-400 bg-amber-100/70 dark:bg-amber-500/15'
+              : 'text-slate-400 dark:text-slate-500 bg-amber-50/40 dark:bg-amber-500/5';
+
+            return `
+              <tr
+                data-dept="${escapeHtml(r.department)}"
+                class="dept-row hover:bg-sky-50/75 dark:hover:bg-sky-500/10 transition cursor-pointer group"
+              >
+                <td class="py-2.5 pl-4 pr-2 text-center text-slate-400 dark:text-slate-500 font-medium tabular-nums">${idx + 1}</td>
+                <td class="py-2.5 px-2.5 font-heading font-medium text-slate-800 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition">
+                  <div class="flex items-center gap-1">
+                    <span>${escapeHtml(r.department)}</span>
+                    <svg class="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition text-sky-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </td>
+                <td class="py-2.5 px-2 text-right tabular-nums text-slate-700 dark:text-slate-300">${r.manual.toLocaleString()}</td>
+                <td class="py-2.5 px-2 text-right tabular-nums ${r.maintPlan > 0 ? 'font-semibold text-violet-700 dark:text-violet-300' : 'text-slate-400 dark:text-slate-500'}">${r.maintPlan.toLocaleString()}</td>
+                <td class="py-2.5 px-2 text-right tabular-nums font-bold text-slate-900 dark:text-white">${r.total.toLocaleString()}</td>
+                <td class="py-2.5 px-2 text-right tabular-nums font-semibold bg-emerald-50/50 dark:bg-emerald-500/5 text-emerald-700 dark:text-emerald-300">${r.closed.toLocaleString()}</td>
+                <td class="py-2.5 px-2 text-right tabular-nums font-semibold bg-rose-50/50 dark:bg-rose-500/5 text-rose-700 dark:text-rose-300">${r.open.toLocaleString()}</td>
+                <td class="py-2.5 px-2 text-right tabular-nums ${noEqClass}">${r.noEq.toLocaleString()}</td>
+                <td class="py-2.5 px-2 text-right tabular-nums ${noBomClass}">${r.noBom.toLocaleString()}</td>
+                <td class="py-2.5 pl-2 pr-4 text-right">
+                  <span class="inline-block min-w-[68px] text-center px-2.5 py-1 rounded-xl text-xs font-bold tabular-nums ${getRateBadgeClass(r.rate)}">
+                    ${r.rate.toFixed(2)}%
+                  </span>
+                </td>
+              </tr>
+            `;
+          })
+          .join('');
+      }
+
+      // Grand Total Footer
+      tfoot.innerHTML = `
+        <tr class="text-slate-900 dark:text-white">
+          <td class="py-3 pl-4 pr-2 text-center">-</td>
+          <td class="py-3 px-2.5">รวมทั้งหมด (${rows.length} แผนก)</td>
+          <td class="py-3 px-2 text-right tabular-nums">${totals.manual.toLocaleString()}</td>
+          <td class="py-3 px-2 text-right tabular-nums text-violet-700 dark:text-violet-300">${totals.maintPlan.toLocaleString()}</td>
+          <td class="py-3 px-2 text-right tabular-nums">${totals.total.toLocaleString()}</td>
+          <td class="py-3 px-2 text-right tabular-nums bg-emerald-100/70 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300">${totals.closed.toLocaleString()}</td>
+          <td class="py-3 px-2 text-right tabular-nums bg-rose-100/70 dark:bg-rose-500/15 text-rose-800 dark:text-rose-300">${totals.open.toLocaleString()}</td>
+          <td class="py-3 px-2 text-right tabular-nums bg-amber-100/70 dark:bg-amber-500/15 text-orange-700 dark:text-orange-300">${totals.noEq.toLocaleString()}</td>
+          <td class="py-3 px-2 text-right tabular-nums bg-amber-100/70 dark:bg-amber-500/15 text-rose-700 dark:text-rose-300">${totals.noBom.toLocaleString()}</td>
+          <td class="py-3 pl-2 pr-4 text-right">
+            <span class="inline-block min-w-[68px] text-center px-2.5 py-1 rounded-xl text-xs font-bold tabular-nums ${getRateBadgeClass(totals.rate)}">
+              ${totals.rate.toFixed(2)}%
+            </span>
+          </td>
+        </tr>
+      `;
+
+      // Bind Row Click -> Drill-Down
+      tbody.querySelectorAll('.dept-row').forEach((tr) => {
+        tr.addEventListener('click', () => openDrillModal(tr.dataset.dept));
+      });
+
+      // Update sort indicator icons
+      document.querySelectorAll('.sortable-th').forEach((th) => {
+        const icon = th.querySelector('.sort-icon');
+        if (th.dataset.sort === state.sortBy) {
+          icon.textContent = state.sortDir === 'asc' ? '↑' : '↓';
+          icon.className = 'sort-icon text-sky-600 dark:text-sky-400 font-bold';
+        } else {
+          icon.textContent = '↕';
+          icon.className = 'sort-icon opacity-35';
+        }
+      });
+    }
+
+    // =========================================================================
+    // 9. HORIZONTAL BAR CHART (CHART.JS + INLINE LABELS & 90% TARGET + FALLBACK)
+    // =========================================================================
+    function getBarColor(rate) {
+      if (rate >= 90) return '#0284c7';  // Blue
+      if (rate >= 80) return '#10b981';  // Green
+      if (rate >= 70) return '#f59e0b';  // Amber
+      return '#ef4444';                  // Red
+    }
+
+    // Custom inline plugin: draws vertical dashed 90% target line ("เป้า 90%") + end-of-bar % labels
+    const sapChartOverlayPlugin = {
+      id: 'sapChartOverlay',
+      afterDatasetsDraw(chart) {
+        try {
+          const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+          if (!x) return;
+          const isDark = document.documentElement.classList.contains('dark');
+
+          ctx.save();
+
+          // 1. Vertical dashed 90% Target Line
+          const xTarget = x.getPixelForValue(90);
+          ctx.beginPath();
+          ctx.setLineDash([5, 5]);
+          ctx.lineWidth = 1.6;
+          ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.85)' : 'rgba(2, 132, 199, 0.8)';
+          ctx.moveTo(xTarget, top);
+          ctx.lineTo(xTarget, bottom);
+          ctx.stroke();
+
+          // Target Pill Badge
+          ctx.setLineDash([]);
+          ctx.font = '600 11px "Anuphan", "Plus Jakarta Sans", sans-serif';
+          const targetLabel = 'เป้า 90%';
+          const pillW = ctx.measureText(targetLabel).width + 14;
+          const pillH = 20;
+          const pillX = xTarget - pillW / 2;
+          const pillY = top - 24;
+
+          ctx.fillStyle = isDark ? '#0284c7' : '#0369a1';
+          if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(pillX, pillY, pillW, pillH, 6);
+            ctx.fill();
+          } else {
+            ctx.fillRect(pillX, pillY, pillW, pillH);
+          }
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(targetLabel, xTarget, pillY + pillH / 2 + 0.5);
+
+          // 2. End-of-Bar Percentage Labels
+          const meta = chart.getDatasetMeta(0);
+          const dataset = chart.data.datasets[0];
+          if (meta && meta.data && dataset) {
+            ctx.font = '600 11.5px "JetBrains Mono", monospace';
+            ctx.fillStyle = isDark ? '#f1f5f9' : '#0f172a';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            meta.data.forEach((bar, index) => {
+              const val = dataset.data[index];
+              if (val === undefined || val === null) return;
+              ctx.fillText(`${Number(val).toFixed(2)}%`, bar.x + 6, bar.y);
+            });
+          }
+
+          ctx.restore();
+        } catch (e) { /* safe guard */ }
+      },
+    };
+
+    function renderHtmlBarFallback(rows) {
+      const canvas = document.getElementById('closureChart');
+      const fallback = document.getElementById('chartFallback');
+      canvas.classList.add('hidden');
+      fallback.classList.remove('hidden');
+
+      fallback.innerHTML = rows
+        .map((r) => {
+          const color = getBarColor(r.rate);
+          return `
+            <div data-dept="${escapeHtml(r.department)}" class="fallback-bar-row cursor-pointer group">
+              <div class="flex justify-between text-xs mb-1">
+                <span class="font-heading font-medium text-slate-700 dark:text-slate-200 group-hover:text-sky-600">${escapeHtml(r.department)}</span>
+                <span class="font-bold tabular-nums text-slate-900 dark:text-white">${r.rate.toFixed(2)}%</span>
+              </div>
+              <div class="h-3.5 w-full rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden relative">
+                <div class="h-full rounded-full transition-all duration-500" style="width:${Math.min(r.rate, 100)}%; background-color:${color}"></div>
+                <div class="absolute top-0 bottom-0 w-0.5 bg-sky-600/80" style="left:90%" title="เป้า 90%"></div>
+              </div>
+            </div>`;
+        })
+        .join('');
+
+      fallback.querySelectorAll('.fallback-bar-row').forEach((el) => {
+        el.addEventListener('click', () => openDrillModal(el.dataset.dept));
+      });
+    }
+
+    function renderChartSafe(rows) {
+      const container = document.getElementById('chartContainer');
+      const dynamicHeight = Math.max(360, rows.length * 36 + 70);
+      container.style.height = `${dynamicHeight}px`;
+
+      if (typeof Chart === 'undefined') {
+        renderHtmlBarFallback(rows);
+        return;
+      }
+
+      try {
+        const canvas = document.getElementById('closureChart');
+        const fallback = document.getElementById('chartFallback');
+        canvas.classList.remove('hidden');
+        fallback.classList.add('hidden');
+
+        const ctx = canvas.getContext('2d');
+        const isDark = document.documentElement.classList.contains('dark');
+        const labels = rows.map((r) => r.department);
+        const dataValues = rows.map((r) => Number(r.rate.toFixed(2)));
+        const bgColors = rows.map((r) => getBarColor(r.rate));
+
+        if (state.chartInstance) {
+          state.chartInstance.destroy();
+          state.chartInstance = null;
+        }
+
+        state.chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: '% ปิดงาน',
+                data: dataValues,
+                backgroundColor: bgColors,
+                borderRadius: 8,
+                borderSkipped: false,
+                barPercentage: 0.68,
+                categoryPercentage: 0.85,
+              },
+            ],
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 30, right: 62, left: 4, bottom: 4 } },
+            onClick: (_evt, elements) => {
+              if (elements && elements.length > 0) {
+                const clicked = rows[elements[0].index];
+                if (clicked) openDrillModal(clicked.department);
+              }
+            },
+            onHover: (event, elements) => {
+              if (event && event.native && event.native.target) {
+                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+              }
+            },
+            scales: {
+              x: {
+                min: 0,
+                max: 100,
+                ticks: {
+                  stepSize: 20,
+                  color: isDark ? '#94a3b8' : '#64748b',
+                  font: { family: '"JetBrains Mono", monospace', size: 11 },
+                  callback: (val) => `${val}%`,
+                },
+                grid: {
+                  color: isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(148, 163, 184, 0.22)',
+                },
+                border: { display: false },
+              },
+              y: {
+                ticks: {
+                  color: isDark ? '#e2e8f0' : '#1e293b',
+                  font: { family: '"Anuphan", "Plus Jakarta Sans", sans-serif', size: 12, weight: '500' },
+                },
+                grid: { display: false },
+                border: { display: false },
+              },
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.94)',
+                titleFont: { family: '"Anuphan", "Plus Jakarta Sans", sans-serif', size: 13, weight: '600' },
+                bodyFont: { family: '"Anuphan", "Plus Jakarta Sans", sans-serif', size: 12.5 },
+                padding: 12,
+                cornerRadius: 12,
+                callbacks: {
+                  label: (ctxItem) => {
+                    const row = rows[ctxItem.dataIndex];
+                    if (!row) return '';
+                    return [
+                      ` % ปิดงาน: ${row.rate.toFixed(2)}%`,
+                      ` ปิดงานแล้ว: ${row.closed.toLocaleString()} / ${row.total.toLocaleString()} MO`,
+                      ` ยังไม่ปิด MO: ${row.open.toLocaleString()} รายการ`,
+                    ];
+                  },
+                },
+              },
+            },
+          },
+          plugins: [sapChartOverlayPlugin],
+        });
+      } catch (err) {
+        console.warn('Chart.js render error, using HTML fallback:', err);
+        renderHtmlBarFallback(rows);
+      }
+    }
+
+    // =========================================================================
+    // 10. DRILL-DOWN MODAL
+    // =========================================================================
+    function openDrillModal(deptName) {
+      const rowObj = state.summaryRows.find((r) => r.department === deptName);
+      if (!rowObj) return;
+
+      state.drillDept = rowObj;
+      state.drillFilter = 'all';
+      state.drillSearch = '';
+
+      document.getElementById('drillModalTitle').textContent = `แผนก: ${rowObj.department}`;
+      document.getElementById('drillModalSubtitle').textContent =
+        `ทั้งหมด ${rowObj.total.toLocaleString()} MO • ปิดงาน ${rowObj.closed.toLocaleString()} (${rowObj.rate.toFixed(2)}%) • ยังไม่ปิด ${rowObj.open.toLocaleString()}`;
+
+      const demoView = document.getElementById('drillDemoView');
+      const realView = document.getElementById('drillRealView');
+      const exportBtn = document.getElementById('btnExportDeptExcel');
+
+      if (state.isDemo) {
+        demoView.classList.remove('hidden');
+        realView.classList.add('hidden');
+        exportBtn.classList.add('hidden');
+        document.getElementById('drillDemoCards').innerHTML = `
+          <div class="rounded-2xl p-3.5 bg-slate-100 dark:bg-slate-800">
+            <div class="text-xs text-slate-500 dark:text-slate-400">Manual / Maint.Plan</div>
+            <div class="text-lg font-bold tabular-nums mt-1">${rowObj.manual.toLocaleString()} / ${rowObj.maintPlan.toLocaleString()}</div>
+          </div>
+          <div class="rounded-2xl p-3.5 bg-emerald-50 dark:bg-emerald-500/15">
+            <div class="text-xs text-emerald-700 dark:text-emerald-300">ปิดงานแล้ว</div>
+            <div class="text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300 mt-1">${rowObj.closed.toLocaleString()} (${rowObj.rate.toFixed(2)}%)</div>
+          </div>
+          <div class="rounded-2xl p-3.5 bg-rose-50 dark:bg-rose-500/15">
+            <div class="text-xs text-rose-700 dark:text-rose-300">ยังไม่ปิด MO</div>
+            <div class="text-lg font-bold tabular-nums text-rose-700 dark:text-rose-300 mt-1">${rowObj.open.toLocaleString()}</div>
+          </div>
+          <div class="rounded-2xl p-3.5 bg-amber-50 dark:bg-amber-500/15">
+            <div class="text-xs text-amber-700 dark:text-amber-300">ไม่มี EQ / ไม่มี BOM</div>
+            <div class="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-300 mt-1">${rowObj.noEq.toLocaleString()} / ${rowObj.noBom.toLocaleString()}</div>
+          </div>
+        `;
+      } else {
+        demoView.classList.add('hidden');
+        realView.classList.remove('hidden');
+        exportBtn.classList.remove('hidden');
+        document.getElementById('drillSearchInput').value = '';
+        renderDrillTabs();
+        renderDrillTable();
+      }
+
+      const modal = document.getElementById('drillModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeDrillModal() {
+      const modal = document.getElementById('drillModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function getFilteredDrillRecords() {
+      if (!state.drillDept) return [];
+      let list = state.drillDept.records || [];
+      if (state.drillFilter === 'closed') list = list.filter((r) => r.isClosed);
+      else if (state.drillFilter === 'open') list = list.filter((r) => !r.isClosed);
+      else if (state.drillFilter === 'noEq') list = list.filter((r) => r.noEq);
+      else if (state.drillFilter === 'noBom') list = list.filter((r) => r.noBom);
+
+      if (state.drillSearch.trim() !== '') {
+        const q = state.drillSearch.trim().toLowerCase();
+        list = list.filter(
+          (r) =>
+            r.order.toLowerCase().includes(q) ||
+            r.description.toLowerCase().includes(q) ||
+            r.functionalLoc.toLowerCase().includes(q) ||
+            r.equipment.toLowerCase().includes(q) ||
+            r.systemStatus.toLowerCase().includes(q)
+        );
+      }
+      return list;
+    }
+
+    function renderDrillTabs() {
+      const d = state.drillDept;
+      const tabs = [
+        { id: 'all', label: 'ทั้งหมด', count: d.total },
+        { id: 'closed', label: 'ปิดงาน', count: d.closed },
+        { id: 'open', label: 'ยังไม่ปิด MO', count: d.open },
+        { id: 'noEq', label: 'ไม่มี EQ', count: d.noEq },
+        { id: 'noBom', label: 'ไม่มี BOM', count: d.noBom },
+      ];
+      const wrap = document.getElementById('drillFilterTabs');
+      wrap.innerHTML = tabs
+        .map((t) => {
+          const active = state.drillFilter === t.id;
+          const cls = active
+            ? 'bg-sky-600 text-white shadow-sm'
+            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700';
+          return `<button type="button" data-tab="${t.id}" class="drill-tab-btn px-3 py-1.5 rounded-xl font-heading text-xs font-medium transition cursor-pointer ${cls}">
+            ${t.label} <span class="ml-1 opacity-80 tabular-nums">(${t.count.toLocaleString()})</span>
+          </button>`;
+        })
+        .join('');
+
+      wrap.querySelectorAll('.drill-tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.drillFilter = btn.dataset.tab;
+          renderDrillTabs();
+          renderDrillTable();
+        });
+      });
+    }
+
+    function renderDrillTable() {
+      const filtered = getFilteredDrillRecords();
+      const tbody = document.getElementById('drillTableBody');
+      const maxShow = 500;
+      const sliced = filtered.slice(0, maxShow);
+
+      document.getElementById('drillCountInfo').textContent =
+        filtered.length > maxShow
+          ? `แสดง ${maxShow.toLocaleString()} จาก ${filtered.length.toLocaleString()} รายการ`
+          : `แสดง ${filtered.length.toLocaleString()} รายการ`;
+
+      if (sliced.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="py-10 text-center text-slate-400">ไม่พบรายการใบงานในตัวกรองนี้</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = sliced
+        .map((r, i) => {
+          const statusBadge = r.isClosed
+            ? `<span class="px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px]">ปิดงาน</span>`
+            : `<span class="px-2 py-0.5 rounded-lg bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 font-semibold text-[11px]">ยังไม่ปิด</span>`;
+
+          return `
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+              <td class="py-2 px-3 text-slate-400 tabular-nums">${i + 1}</td>
+              <td class="py-2 px-3 font-mono font-semibold text-sky-600 dark:text-sky-400 whitespace-nowrap">${escapeHtml(r.order || '-')}</td>
+              <td class="py-2 px-3 text-xs whitespace-nowrap tabular-nums">${escapeHtml(r.createdOn || '-')}</td>
+              <td class="py-2 px-3 whitespace-nowrap">${escapeHtml(r.orderType || '-')}</td>
+              <td class="py-2 px-3 max-w-[260px] truncate" title="${escapeHtml(r.description)}">${escapeHtml(r.description || '-')}</td>
+              <td class="py-2 px-3 font-mono text-xs whitespace-nowrap">${escapeHtml(r.functionalLoc || '-')}</td>
+              <td class="py-2 px-3 font-mono text-xs whitespace-nowrap ${r.noEq ? 'text-orange-600 dark:text-orange-400 font-semibold' : ''}">${escapeHtml(r.equipment || '(ไม่มี)')}</td>
+              <td class="py-2 px-3 font-mono text-xs whitespace-nowrap ${r.noBom ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}">${escapeHtml(r.assembly || '(ไม่มี)')}</td>
+              <td class="py-2 px-3 font-mono text-xs whitespace-nowrap">${escapeHtml(r.systemStatus || '-')}</td>
+              <td class="py-2 px-3 whitespace-nowrap">${statusBadge}</td>
+              <td class="py-2 px-3 font-mono text-xs whitespace-nowrap">${escapeHtml(r.maintenancePlan || '-')}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    }
+
+    // =========================================================================
+    // 11. DEPARTMENT CODE MAPPING SETTINGS MODAL
+    // =========================================================================
+    function openMappingModal() {
+      renderMappingModalContent();
+      const modal = document.getElementById('mappingModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeMappingModal() {
+      const modal = document.getElementById('mappingModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function renderMappingModalContent() {
+      const allDepts = new Set([...PRIMARY_17_DEPTS, ...Object.values(state.codeMapping)]);
+      document.getElementById('deptDatalist').innerHTML = Array.from(allDepts)
+        .map((d) => `<option value="${escapeHtml(d)}"></option>`)
+        .join('');
+
+      const unmappedWrap = document.getElementById('unmappedQuickFix');
+      const unmappedList = document.getElementById('unmappedPillsList');
+      const unmappedEntries = Object.entries(state.unmappedCodes);
+
+      if (unmappedEntries.length > 0) {
+        unmappedWrap.classList.remove('hidden');
+        unmappedList.innerHTML = unmappedEntries
+          .map(
+            ([code, cnt]) => `
+            <button type="button" data-code="${escapeHtml(code)}" class="quick-unmapped-btn px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-500/40 text-xs font-mono font-semibold text-rose-700 dark:text-rose-300 hover:bg-rose-600 hover:text-white transition cursor-pointer">
+              ${escapeHtml(code)} (${cnt})
+            </button>`
+          )
+          .join('');
+        unmappedList.querySelectorAll('.quick-unmapped-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            document.getElementById('newMapCode').value = btn.dataset.code;
+            document.getElementById('newMapDept').focus();
+          });
+        });
+      } else {
+        unmappedWrap.classList.add('hidden');
+      }
+
+      const query = (document.getElementById('mapSearchInput').value || '').trim().toLowerCase();
+      const entries = Object.entries(state.codeMapping)
+        .filter(([k, v]) => !query || k.toLowerCase().includes(query) || v.toLowerCase().includes(query))
+        .sort((a, b) => a[0].localeCompare(b[0]));
+
+      document.getElementById('mapTotalCount').textContent = `${Object.keys(state.codeMapping).length} รายการ`;
+
+      const tbody = document.getElementById('mappingTableBody');
+      tbody.innerHTML = entries
+        .map(
+          ([code, dept]) => `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/60">
+            <td class="py-2 px-2 font-mono font-semibold text-sky-600 dark:text-sky-400">${escapeHtml(code)}</td>
+            <td class="py-2 px-2 text-slate-800 dark:text-slate-200">${escapeHtml(dept)}</td>
+            <td class="py-2 px-2 text-right space-x-2">
+              <button type="button" data-edit-code="${escapeHtml(code)}" data-edit-dept="${escapeHtml(dept)}" class="btn-edit-map text-xs text-sky-600 hover:underline cursor-pointer">แก้ไข</button>
+              <button type="button" data-del-code="${escapeHtml(code)}" class="btn-del-map text-xs text-rose-600 hover:underline cursor-pointer">ลบ</button>
+            </td>
+          </tr>`
+        )
+        .join('');
+
+      tbody.querySelectorAll('.btn-edit-map').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.getElementById('newMapCode').value = btn.dataset.editCode;
+          document.getElementById('newMapDept').value = btn.dataset.editDept;
+          document.getElementById('newMapDept').focus();
+        });
+      });
+
+      tbody.querySelectorAll('.btn-del-map').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const code = btn.dataset.delCode;
+          delete state.codeMapping[code];
+          saveCodeMapping();
+          recalculateAndRender();
+          renderMappingModalContent();
+          showToast(`ลบการจับคู่ ${code} แล้ว`, 'info');
+        });
+      });
+    }
+
+    // =========================================================================
+    // 12. EXCEL EXPORT (WITH AUTOMATIC CSV FALLBACK)
+    // =========================================================================
+    function downloadCSVFallback(rows, filename) {
+      if (!rows.length) return;
+      const headers = Object.keys(rows[0]);
+      const csvLines = [
+        headers.join(','),
+        ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+      ];
+      const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename.replace(/\.xlsx$/i, '.csv');
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportSummaryExcel() {
+      try {
+        const rows = state.summaryRows.map((r, i) => ({
+          'ลำดับ': i + 1,
+          'แผนก': r.department,
+          'MO (Manual)': r.manual,
+          'MO (Maint.Plan)': r.maintPlan,
+          'จำนวน MO2569': r.total,
+          'ปิดงาน': r.closed,
+          'ยังไม่ปิด MO': r.open,
+          'ไม่มี EQ': r.noEq,
+          'ไม่มี BOM': r.noBom,
+          '%ปิดงาน': Number(r.rate.toFixed(2)),
+        }));
+        const dateStamp = new Date().toISOString().slice(0, 10);
+        const filename = `SAP_PM_MO_Summary_${dateStamp}.xlsx`;
+
+        if (typeof XLSX !== 'undefined') {
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'สรุป_MO_SAP_PM');
+          XLSX.writeFile(wb, filename);
+          showToast('ส่งออกไฟล์สรุป Excel (.xlsx) สำเร็จ', 'success');
+        } else {
+          downloadCSVFallback(rows, filename);
+          showToast('ส่งออกไฟล์สรุปเป็น CSV สำเร็จ', 'success');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('เกิดข้อผิดพลาดในการส่งออกไฟล์', 'error');
+      }
+    }
+
+    function exportDepartmentExcel() {
+      if (!state.drillDept) return;
+      try {
+        const filtered = getFilteredDrillRecords();
+        const rows = filtered.map((r, i) => ({
+          'ลำดับ': i + 1,
+          'แผนก': r.department,
+          'Order': r.order,
+          'Created On': r.createdOn,
+          'Order Type': r.orderType,
+          'Description': r.description,
+          'Functional Loc.': r.functionalLoc,
+          'Planner Group': r.plannerGroup,
+          'Code': r.code,
+          'Equipment': r.equipment,
+          'Assembly': r.assembly,
+          'System status': r.systemStatus,
+          'สถานะ': r.isClosed ? 'ปิดงาน' : 'ยังไม่ปิด MO',
+          'MaintenancePlan': r.maintenancePlan,
+        }));
+        const safeDept = state.drillDept.department.replace(/[\\/:*?"<>|]/g, '_');
+        const filename = `SAP_PM_${safeDept}.xlsx`;
+
+        if (typeof XLSX !== 'undefined') {
+          const ws = XLSX.utils.json_to_sheet(rows);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'MO_Detail');
+          XLSX.writeFile(wb, filename);
+          showToast(`ส่งออกข้อมูลแผนก ${state.drillDept.department} สำเร็จ`, 'success');
+        } else {
+          downloadCSVFallback(rows, filename);
+          showToast(`ส่งออกข้อมูลแผนก ${state.drillDept.department} เป็น CSV สำเร็จ`, 'success');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('เกิดข้อผิดพลาดในการส่งออกข้อมูลแผนก', 'error');
+      }
+    }
+
+    // =========================================================================
+    // 13. EVENT BINDING & BOOTSTRAP
+    // =========================================================================
+    function bindEvents() {
+      const fileInput = document.getElementById('fileInput');
+      const dropZone = document.getElementById('dropZone');
+      const dragOverlay = document.getElementById('dragOverlay');
+
+      // Admin Upload Button & Drop Zone
+      document.getElementById('btnUploadAdmin').addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFile(e.target.files[0]);
+          e.target.value = '';
+        }
+      });
+
+      // Drop zone local hover feedback
+      dropZone.addEventListener('dragover', (e) => {
+        if (!state.isAdmin) return;
+        e.preventDefault();
+        dropZone.classList.add('border-sky-500', 'bg-sky-50/70', 'dark:bg-sky-500/15');
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('border-sky-500', 'bg-sky-50/70', 'dark:bg-sky-500/15');
+      });
+      dropZone.addEventListener('drop', () => {
+        dropZone.classList.remove('border-sky-500', 'bg-sky-50/70', 'dark:bg-sky-500/15');
+      });
+
+      // Full-Window Drag & Drop (Enabled ONLY in Admin Mode)
+      let dragCounter = 0;
+      window.addEventListener('dragenter', (e) => {
+        if (!state.isAdmin) return;
+        e.preventDefault();
+        dragCounter++;
+        dragOverlay.classList.remove('hidden');
+        dragOverlay.classList.add('flex');
+      });
+      window.addEventListener('dragover', (e) => {
+        if (!state.isAdmin) return;
+        e.preventDefault();
+      });
+      window.addEventListener('dragleave', (e) => {
+        if (!state.isAdmin) return;
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          dragOverlay.classList.add('hidden');
+          dragOverlay.classList.remove('flex');
+        }
+      });
+      window.addEventListener('drop', (e) => {
+        if (!state.isAdmin) return;
+        e.preventDefault();
+        dragCounter = 0;
+        dragOverlay.classList.add('hidden');
+        dragOverlay.classList.remove('flex');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Sheet selector
+      document.getElementById('sheetSelector').addEventListener('change', (e) => {
+        const target = state.validSheets.find((s) => s.name === e.target.value);
+        if (target) {
+          loadParsedSheet(target);
+          showToast(`เปลี่ยนเป็นชีต "${target.name}" แล้ว`, 'info');
+        }
+      });
+
+      // Refresh button (Re-apply latest department mapping & recalculate without clearing data or logging out)
+      document.getElementById('btnRefreshData').addEventListener('click', () => {
+        const icon = document.getElementById('refreshIcon');
+        if (icon) {
+          icon.classList.remove('animate-spin-once');
+          void icon.offsetWidth;
+          icon.classList.add('animate-spin-once');
+        }
+        loadCodeMapping();
+        updateThaiClock();
+        renderFileStatusBar();
+        recalculateAndRender();
+        showToast('รีเฟรชข้อมูลเรียบร้อยแล้ว', 'success');
+      });
+
+      // Admin Login / Logout & PIN Modal
+      document.getElementById('btnAdminLogin').addEventListener('click', openPinModal);
+      document.getElementById('btnAdminLogout').addEventListener('click', logoutAdmin);
+      document.getElementById('btnHeaderLogout').addEventListener('click', logoutAdmin);
+      document.getElementById('btnClosePinModal').addEventListener('click', closePinModal);
+      document.getElementById('pinModal').addEventListener('click', (e) => {
+        if (e.target.id === 'pinModal') closePinModal();
+      });
+      document.querySelectorAll('#pinModal .pin-key').forEach((btn) => {
+        btn.addEventListener('click', () => handlePinDigit(btn.dataset.pin));
+      });
+      document.getElementById('btnPinBackspace').addEventListener('click', handlePinBackspace);
+      document.getElementById('btnPinClear').addEventListener('click', handlePinClear);
+
+      // Physical Keyboard Support for PIN Modal & Esc closing modals
+      window.addEventListener('keydown', (e) => {
+        if (state.pinModalOpen) {
+          if (e.key >= '0' && e.key <= '9') {
+            e.preventDefault();
+            handlePinDigit(e.key);
+          } else if (e.key === 'Backspace') {
+            e.preventDefault();
+            handlePinBackspace();
+          } else if (e.key === 'Enter' && state.pinBuffer.length === 4) {
+            e.preventDefault();
+            verifyPin();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closePinModal();
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          closeDrillModal();
+          closeMappingModal();
+        }
+      });
+
+      // Theme & Export Summary
+      document.getElementById('btnThemeToggle').addEventListener('click', toggleTheme);
+      document.getElementById('btnExportSummary').addEventListener('click', exportSummaryExcel);
+
+      // Filters & Search
+      document.getElementById('togglePrimary17').addEventListener('change', (e) => {
+        state.onlyPrimary17 = e.target.checked;
+        recalculateAndRender();
+      });
+      document.getElementById('deptSearchInput').addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        recalculateAndRender();
+      });
+
+      // Sortable Table Headers
+      document.querySelectorAll('.sortable-th').forEach((th) => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sort;
+          if (state.sortBy === col) {
+            state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.sortBy = col;
+            state.sortDir = col === 'department' ? 'asc' : 'desc';
+          }
+          recalculateAndRender();
+        });
+      });
+
+      // Drill-Down Modal
+      document.getElementById('btnCloseDrill').addEventListener('click', closeDrillModal);
+      document.getElementById('drillModal').addEventListener('click', (e) => {
+        if (e.target.id === 'drillModal') closeDrillModal();
+      });
+      document.getElementById('drillSearchInput').addEventListener('input', (e) => {
+        state.drillSearch = e.target.value;
+        renderDrillTable();
+      });
+      document.getElementById('btnExportDeptExcel').addEventListener('click', exportDepartmentExcel);
+      document.getElementById('btnDrillGoAdmin').addEventListener('click', () => {
+        closeDrillModal();
+        if (!state.isAdmin) openPinModal();
+      });
+
+      // Mapping Settings Modal
+      document.getElementById('btnOpenMapping').addEventListener('click', openMappingModal);
+      document.getElementById('btnExtraInfoBadge').addEventListener('click', () => {
+        if (state.isAdmin) openMappingModal();
+        else openPinModal();
+      });
+      document.getElementById('btnCloseMapping').addEventListener('click', closeMappingModal);
+      document.getElementById('mappingModal').addEventListener('click', (e) => {
+        if (e.target.id === 'mappingModal') closeMappingModal();
+      });
+      document.getElementById('mapSearchInput').addEventListener('input', renderMappingModalContent);
+
+      document.getElementById('addMappingForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const code = document.getElementById('newMapCode').value.trim().toUpperCase();
+        const dept = document.getElementById('newMapDept').value.trim();
+        if (!code || !dept) return;
+        state.codeMapping[code] = dept;
+        saveCodeMapping();
+        document.getElementById('newMapCode').value = '';
+        document.getElementById('newMapDept').value = '';
+        recalculateAndRender();
+        renderMappingModalContent();
+        showToast(`บันทึกการจับคู่ ${code} → ${dept} เรียบร้อย`, 'success');
+      });
+
+      document.getElementById('btnResetMapping').addEventListener('click', () => {
+        state.codeMapping = { ...DEFAULT_CODE_MAPPING };
+        saveCodeMapping();
+        recalculateAndRender();
+        renderMappingModalContent();
+        showToast('คืนค่าเริ่มต้น 92 Code เรียบร้อยแล้ว', 'info');
+      });
+    }
+
+    // =========================================================================
+    // 14. SYNCHRONOUS FIRST RENDER + SAFE BACKGROUND RESTORE
+    // =========================================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Initialize Theme, Mapping, Clock, Events & Admin Session synchronously
+      initTheme();
+      loadCodeMapping();
+      updateThaiClock();
+      setInterval(updateThaiClock, 1000);
+      bindEvents();
+
+      // Restore Admin login state across browser Refresh (F5)
+      state.isAdmin = safeStorageGet(ADMIN_AUTH_KEY) === 'true';
+      applyAdminUI();
+
+      // 2. Render Demo Dashboard IMMEDIATELY & SYNCHRONOUSLY (never blank!)
+      recalculateAndRender();
+
+      // 3. Ensure Chart.js renders once CDN finishes loading
+      window.addEventListener('load', () => {
+        if (!state.chartInstance && typeof Chart !== 'undefined') {
+          renderChartSafe(state.summaryRows);
+        }
+      });
+
+      // 4. Asynchronously restore previously uploaded Excel data from IndexedDB
+      loadUploadedDataFromDB().then((savedUpload) => {
+        if (savedUpload && Array.isArray(savedUpload.rawRecords) && savedUpload.rawRecords.length > 0) {
+          state.isDemo = false;
+          state.fileName = savedUpload.fileName || 'Uploaded_Data.xlsx';
+          state.currentSheetName = savedUpload.currentSheetName || '';
+          state.uploadedAt = savedUpload.uploadedAt || '';
+          state.matchedColumns = savedUpload.matchedColumns || {};
+          state.rawRecords = savedUpload.rawRecords;
+          renderFileStatusBar();
+          recalculateAndRender();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

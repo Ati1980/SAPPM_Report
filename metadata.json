@@ -1,0 +1,6 @@
+{
+  "name": "SAP-PM MO Dashboard 2569",
+  "description": "รายงานการเปิด-ปิด Maintenance Order (MO) ในระบบ SAP-PM 2569 พร้อมกราฟวิเคราะห์ ตารางสรุปแยกตามแผนก และรองรับมือถือ iOS และ Android",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

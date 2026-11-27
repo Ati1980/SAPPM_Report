@@ -9,9 +9,22 @@ interface PinModalProps {
   onSuccess: (token: string, isFirstSetup: boolean) => void;
 }
 
+async function parseJsonSafe<T>(res: Response): Promise<T | null> {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return null;
+  }
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [pinBuffer, setPinBuffer] = useState('');
   const pinRef = useRef('');
+  const submittingRef = useRef(false);
   const [pendingSetupPin, setPendingSetupPin] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [isVerified, setIsVerified] = useState(false);
@@ -32,18 +45,27 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
     setErrorMessage('');
     setIsVerified(false);
     setIsSubmitting(false);
+    submittingRef.current = false;
     setIsCheckingStatus(true);
 
     let active = true;
-    fetch('/api/admin/status')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { pinConfigured?: boolean } | null) => {
-        if (active && data) {
+    fetch('/api/admin/status', { cache: 'no-store' })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return parseJsonSafe<{ pinConfigured?: boolean }>(res);
+      })
+      .then((data) => {
+        if (!active) return;
+        if (data && typeof data.pinConfigured === 'boolean') {
           setIsFirstRunSetup(!data.pinConfigured);
+        } else {
+          setErrorMessage('ไม่สามารถเชื่อมต่อ API เซิร์ฟเวอร์ได้ กรุณารีเฟรชหน้าเว็บแล้วลองใหม่');
         }
       })
       .catch(() => {
-        // Default to login mode if status check fails
+        if (active) {
+          setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณารีเฟรชหน้าเว็บแล้วลองใหม่');
+        }
       })
       .finally(() => {
         if (active) setIsCheckingStatus(false);
@@ -56,7 +78,8 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
   const submitPinToServer = useCallback(
     async (pin: string, setupMode: boolean) => {
-      if (isSubmitting) return;
+      if (submittingRef.current) return;
+      submittingRef.current = true;
       setIsSubmitting(true);
       try {
         const endpoint = setupMode ? '/api/admin/setup' : '/api/admin/login';
@@ -65,41 +88,49 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pin }),
         });
-        const data = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+        const data = await parseJsonSafe<{ token?: string; error?: string }>(res);
 
-        if (res.ok && data.token) {
+        if (res.ok && data?.token) {
           setIsVerified(true);
           const token = data.token;
           setTimeout(() => {
             onSuccess(token, setupMode);
           }, 180);
+          return;
+        }
+
+        if (!data) {
+          setErrorMessage(
+            `API ไม่ตอบสนอง (${res.status}) — กรุณารีเฟรชหน้าเว็บหรือเปิดผ่านลิงก์ Dev App`
+          );
         } else {
-          // If setup returned 409 (PIN already set elsewhere), switch to login mode cleanly
           if (setupMode && res.status === 409) {
             setIsFirstRunSetup(false);
             setPendingSetupPin(null);
           }
           setErrorMessage(data.error || 'รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่');
-          setShakeCount((c) => c + 1);
-          setTimeout(() => {
-            updatePinBuffer('');
-          }, 350);
         }
+        setShakeCount((c) => c + 1);
+        setTimeout(() => {
+          updatePinBuffer('');
+        }, 350);
       } catch {
-        setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบ PIN ได้');
+        setErrorMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบ PIN ได้ กรุณาลองใหม่');
         setShakeCount((c) => c + 1);
         setTimeout(() => {
           updatePinBuffer('');
         }, 350);
       } finally {
+        submittingRef.current = false;
         setIsSubmitting(false);
       }
     },
-    [isSubmitting, onSuccess, updatePinBuffer]
+    [onSuccess, updatePinBuffer]
   );
 
   const handleCompleteFourDigits = useCallback(
     (completedPin: string) => {
+      if (submittingRef.current) return;
       if (isFirstRunSetup) {
         if (pendingSetupPin === null) {
           setPendingSetupPin(completedPin);
@@ -127,7 +158,13 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
 
   const handleDigit = useCallback(
     (digit: string) => {
-      if (!isOpen || isVerified || isSubmitting || isCheckingStatus || pinRef.current.length >= 4) {
+      if (
+        !isOpen ||
+        isVerified ||
+        submittingRef.current ||
+        isCheckingStatus ||
+        pinRef.current.length >= 4
+      ) {
         return;
       }
       setErrorMessage('');
@@ -139,22 +176,22 @@ export const PinModal: React.FC<PinModalProps> = ({ isOpen, onClose, onSuccess }
         }, 120);
       }
     },
-    [isOpen, isVerified, isSubmitting, isCheckingStatus, updatePinBuffer, handleCompleteFourDigits]
+    [isOpen, isVerified, isCheckingStatus, updatePinBuffer, handleCompleteFourDigits]
   );
 
   const handleBackspace = useCallback(() => {
-    if (!isOpen || isVerified || isSubmitting || pinRef.current.length === 0) return;
+    if (!isOpen || isVerified || submittingRef.current || pinRef.current.length === 0) return;
     updatePinBuffer(pinRef.current.slice(0, -1));
-  }, [isOpen, isVerified, isSubmitting, updatePinBuffer]);
+  }, [isOpen, isVerified, updatePinBuffer]);
 
   const handleClear = useCallback(() => {
-    if (!isOpen || isVerified || isSubmitting) return;
+    if (!isOpen || isVerified || submittingRef.current) return;
     updatePinBuffer('');
     setErrorMessage('');
     if (isFirstRunSetup) {
       setPendingSetupPin(null);
     }
-  }, [isOpen, isVerified, isSubmitting, isFirstRunSetup, updatePinBuffer]);
+  }, [isOpen, isVerified, isFirstRunSetup, updatePinBuffer]);
 
   useEffect(() => {
     if (!isOpen) return;
